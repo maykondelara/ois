@@ -1,0 +1,14 @@
+node_modules
+.next
+coverage
+playwright-report
+test-results
+.env
+.env.local
+.env.*.local
+!.env.example
+generated
+*.log
+*.sql.gz
+tsconfig.tsbuildinfo
+prisma/schema 2.prisma
