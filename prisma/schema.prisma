@@ -7,6 +7,43 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum DriverOperationalStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  ON_LEAVE
+}
+
+enum VehicleOperationalStatus {
+  ACTIVE
+  INACTIVE
+  OUT_OF_SERVICE
+}
+
+enum VehicleStatusTransitionSource {
+  MANUAL
+  INSPECTION
+  DEFECT
+}
+
+enum OdometerReadingStatus {
+  ACCEPTED
+  REVIEW_REQUIRED
+  REJECTED
+}
+
+enum OdometerReadingSource {
+  INITIAL_ENTRY
+  MANUAL_ENTRY
+  INSPECTION
+}
+
+enum InspectionVehicleSelectionStrategy {
+  SEARCH_SELECT
+  MANUAL_REGO
+  BOTH
+}
+
 model Company {
   id String @id @default(dbgenerated("uuidv7()")) @db.Uuid
   name String
@@ -114,4 +151,159 @@ model PasswordResetToken {
   expiresAt DateTime @map("expires_at")
   usedAt DateTime? @map("used_at")
   @@map("password_reset_tokens")
+}
+
+model CompanyOperationalSettings {
+  companyId                           String                           @id @map("company_id") @db.Uuid
+  odometerExpectedIncreaseThresholdKm Int                              @default(1000) @map("odometer_expected_increase_threshold_km")
+  inspectionVehicleSelectionStrategy  InspectionVehicleSelectionStrategy @default(BOTH) @map("inspection_vehicle_selection_strategy")
+  createdAt                           DateTime                         @default(now()) @map("created_at")
+  updatedAt                           DateTime                         @updatedAt @map("updated_at")
+  @@map("company_operational_settings")
+}
+
+model VehicleCategory {
+  id        String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
+  code      String
+  name      String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@unique([companyId, code])
+  @@unique([companyId, id])
+  @@index([companyId, isActive])
+  @@map("vehicle_categories")
+}
+
+model Driver {
+  id                       String                  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId                String                  @map("company_id") @db.Uuid
+  userId                   String?                 @map("user_id") @db.Uuid
+  displayName              String                  @map("display_name")
+  phoneE164                String?                 @map("phone_e164")
+  operationalStatus        DriverOperationalStatus @default(ACTIVE) @map("operational_status")
+  depotLocationId          String?                 @map("depot_location_id") @db.Uuid
+  emergencyContactName     String?                 @map("emergency_contact_name")
+  emergencyContactPhoneE164 String?                @map("emergency_contact_phone_e164")
+  archivedAt               DateTime?               @map("archived_at")
+  createdAt                DateTime                @default(now()) @map("created_at")
+  updatedAt                DateTime                @updatedAt @map("updated_at")
+  @@unique([companyId, id])
+  @@unique([companyId, userId])
+  @@index([companyId, operationalStatus])
+  @@index([companyId, depotLocationId])
+  @@map("drivers")
+}
+
+model DriverRegularAvailability {
+  id          String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId   String   @map("company_id") @db.Uuid
+  driverId    String   @map("driver_id") @db.Uuid
+  dayOfWeek   Int      @map("day_of_week")
+  isAvailable Boolean  @default(false) @map("is_available")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  @@unique([companyId, driverId, dayOfWeek])
+  @@unique([companyId, id])
+  @@index([companyId, driverId])
+  @@map("driver_regular_availability")
+}
+
+model DriverLicence {
+  id                      String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId               String   @map("company_id") @db.Uuid
+  driverId                String   @map("driver_id") @db.Uuid
+  licenceType             String   @default("DRIVER_LICENCE") @map("licence_type")
+  issuingJurisdiction     String?  @map("issuing_jurisdiction")
+  licenceNumberCiphertext String   @map("licence_number_ciphertext")
+  licenceNumberLookupHash Bytes    @map("licence_number_lookup_hash")
+  licenceNumberLast4      String   @map("licence_number_last4")
+  licenceNumberKeyVersion String   @map("licence_number_key_version")
+  issuedOn                DateTime? @db.Date @map("issued_on")
+  expiresOn               DateTime @db.Date @map("expires_on")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+  @@unique([companyId, licenceNumberLookupHash])
+  @@unique([companyId, id])
+  @@index([companyId, driverId, expiresOn])
+  @@map("driver_licences")
+}
+
+model DriverVehicleCapability {
+  id                String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId         String   @map("company_id") @db.Uuid
+  driverId          String   @map("driver_id") @db.Uuid
+  vehicleCategoryId String   @map("vehicle_category_id") @db.Uuid
+  authorizedAt      DateTime @default(now()) @map("authorized_at")
+  authorizedByUserId String? @map("authorized_by_user_id") @db.Uuid
+  expiresOn         DateTime? @db.Date @map("expires_on")
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  @@unique([companyId, driverId, vehicleCategoryId])
+  @@unique([companyId, id])
+  @@index([companyId, driverId, isActive])
+  @@map("driver_vehicle_capabilities")
+}
+
+model Vehicle {
+  id                   String                   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId            String                   @map("company_id") @db.Uuid
+  registrationDisplay  String                   @map("registration_display")
+  registrationNormalized String                 @map("registration_normalized")
+  vehicleCategoryId    String                   @map("vehicle_category_id") @db.Uuid
+  depotLocationId      String?                  @map("depot_location_id") @db.Uuid
+  operationalStatus    VehicleOperationalStatus @default(ACTIVE) @map("operational_status")
+  registrationExpiresOn DateTime?               @db.Date @map("registration_expires_on")
+  nextServiceOdometerKm Int?                    @map("next_service_odometer_km")
+  archivedAt           DateTime?                @map("archived_at")
+  createdAt            DateTime                 @default(now()) @map("created_at")
+  updatedAt            DateTime                 @updatedAt @map("updated_at")
+  @@unique([companyId, registrationNormalized])
+  @@unique([companyId, id])
+  @@index([companyId, operationalStatus])
+  @@index([companyId, depotLocationId])
+  @@map("vehicles")
+}
+
+model VehicleStatusHistory {
+  id          String                        @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId   String                        @map("company_id") @db.Uuid
+  vehicleId   String                        @map("vehicle_id") @db.Uuid
+  fromStatus  VehicleOperationalStatus?     @map("from_status")
+  toStatus    VehicleOperationalStatus      @map("to_status")
+  reason      String?
+  source      VehicleStatusTransitionSource @default(MANUAL)
+  actorUserId String                        @map("actor_user_id") @db.Uuid
+  occurredAt  DateTime                      @default(now()) @map("occurred_at")
+  @@unique([companyId, id])
+  @@index([companyId, vehicleId, occurredAt])
+  @@map("vehicle_status_history")
+}
+
+model VehicleOdometerReading {
+  id                           String                @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId                    String                @map("company_id") @db.Uuid
+  vehicleId                    String                @map("vehicle_id") @db.Uuid
+  readingKm                    Int                   @map("reading_km")
+  source                       OdometerReadingSource
+  status                       OdometerReadingStatus
+  reportedAt                   DateTime              @map("reported_at")
+  submittedAt                  DateTime              @default(now()) @map("submitted_at")
+  acceptedAt                   DateTime?             @map("accepted_at")
+  actorUserId                  String                @map("actor_user_id") @db.Uuid
+  reviewedByUserId             String?               @map("reviewed_by_user_id") @db.Uuid
+  reviewedAt                   DateTime?             @map("reviewed_at")
+  reviewNote                   String?               @map("review_note")
+  previousAcceptedReadingId    String?               @map("previous_accepted_reading_id") @db.Uuid
+  previousAcceptedOdometerKm  Int?                   @map("previous_accepted_odometer_km")
+  thresholdKmSnapshot          Int?                  @map("threshold_km_snapshot")
+  differenceKm                 Int?                  @map("difference_km")
+  sourceInspectionId           String?               @map("source_inspection_id") @db.Uuid
+  @@unique([companyId, id])
+  @@unique([companyId, vehicleId, id])
+  @@index([companyId, vehicleId, acceptedAt])
+  @@index([companyId, vehicleId, status])
+  @@map("vehicle_odometer_readings")
 }

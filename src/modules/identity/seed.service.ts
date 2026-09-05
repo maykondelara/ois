@@ -1,14 +1,28 @@
 import type { PrismaClient } from "@prisma/client";
 import { hashPassword } from "@/modules/identity/password.service";
 import { permissionCodes, roleCodes, rolePermissionMatrix } from "@/modules/identity/permissions";
+import { defaultVehicleCategories } from "@/modules/vehicles/registration";
 
 type SeedClient = Pick<
   PrismaClient,
-  "permission" | "role" | "rolePermission" | "company" | "user" | "companyMembership"
+  | "permission"
+  | "role"
+  | "rolePermission"
+  | "company"
+  | "user"
+  | "companyMembership"
+  | "companyOperationalSettings"
+  | "vehicleCategory"
 >;
 
+type SeedOptions = Readonly<{ includePhase3A?: boolean }>;
+
 /** Controlled deployment seed; a demo user is impossible unless its password is supplied at runtime. */
-export async function seedFoundation(client: SeedClient, developmentPassword?: string) {
+export async function seedFoundation(
+  client: SeedClient,
+  developmentPassword?: string,
+  options: SeedOptions = {},
+) {
   for (const code of permissionCodes) {
     await client.permission.upsert({
       where: { code },
@@ -52,4 +66,17 @@ export async function seedFoundation(client: SeedClient, developmentPassword?: s
     update: { roleId: ownerRole.id, status: "ACTIVE" },
     create: { companyId: company.id, userId: owner.id, roleId: ownerRole.id, status: "ACTIVE" },
   });
+  if (options.includePhase3A === false) return;
+  await client.companyOperationalSettings.upsert({
+    where: { companyId: company.id },
+    update: {},
+    create: { companyId: company.id },
+  });
+  for (const code of defaultVehicleCategories) {
+    await client.vehicleCategory.upsert({
+      where: { companyId_code: { companyId: company.id, code } },
+      update: { name: code, isActive: true },
+      create: { companyId: company.id, code, name: code },
+    });
+  }
 }

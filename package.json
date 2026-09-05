@@ -5,6 +5,7 @@
   "scripts": {
     "poc:rls": "tsx poc/rls-poc.ts",
     "poc:imports:check": "node --import tsx poc/import-smoke.ts",
+    "poc:runner:smoke": "OIS_RUNNER_IMPORT_SMOKE=true node --import tsx poc/migration-runner.ts",
     "poc:prisma:generate": "prisma generate",
     "dev": "next dev",
     "build": "next build",

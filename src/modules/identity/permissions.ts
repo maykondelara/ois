@@ -5,6 +5,8 @@ export const permissionCodes = [
   "drivers.manage",
   "vehicles.read",
   "vehicles.manage",
+  "vehicles.odometer.submit",
+  "vehicles.odometer.review",
   "inspections.submit",
   "inspections.read",
   "inspections.review",
@@ -37,6 +39,8 @@ export const rolePermissionMatrix: Record<RoleCode, readonly PermissionCode[]> =
     "drivers.manage",
     "vehicles.read",
     "vehicles.manage",
+    "vehicles.odometer.submit",
+    "vehicles.odometer.review",
     "inspections.read",
     "inspections.review",
     "defects.read",
@@ -53,6 +57,8 @@ export const rolePermissionMatrix: Record<RoleCode, readonly PermissionCode[]> =
     "company.read",
     "drivers.read",
     "vehicles.read",
+    "vehicles.odometer.submit",
+    "vehicles.odometer.review",
     "inspections.submit",
     "inspections.read",
     "inspections.review",
@@ -63,7 +69,13 @@ export const rolePermissionMatrix: Record<RoleCode, readonly PermissionCode[]> =
     "maintenance.read",
     "documents.read",
   ],
-  DRIVER: ["drivers.read", "vehicles.read", "inspections.submit", "documents.read"],
+  DRIVER: [
+    "drivers.read",
+    "vehicles.read",
+    "vehicles.odometer.submit",
+    "inspections.submit",
+    "documents.read",
+  ],
 };
 
 export function isPermissionCode(value: string): value is PermissionCode {
