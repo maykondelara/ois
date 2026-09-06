@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import { AuthorizationError } from "@/lib/errors";
+import { TenantContextUnavailableError } from "@/lib/errors";
 import { withAuthenticatedUserTransaction, withTenantTransaction } from "@/db/tenant-transaction";
 import { recordTenantActivity } from "@/modules/activities/audit.service";
 import { isPermissionCode } from "@/modules/identity/permissions";
@@ -49,7 +49,7 @@ export async function resolveTenantContext(
   });
 
   const context = tenantContextFromMembership(actor, requestedCompanyId, membership);
-  if (!context) throw new AuthorizationError("No active membership for the requested company");
+  if (!context) throw new TenantContextUnavailableError();
   await withTenantTransaction(client, context, async (transaction) => {
     await recordTenantActivity(transaction, context, {
       action: "tenant_context.established",

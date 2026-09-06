@@ -16,6 +16,14 @@ import { vehicleRepository } from "@/modules/vehicles/vehicle.repository";
 
 type TenantClient = Pick<PrismaClient, "$transaction">;
 
+export type VehicleListPageInput = Readonly<{
+  page: number;
+  pageSize: number;
+  q?: string;
+  status?: "ACTIVE" | "INACTIVE" | "OUT_OF_SERVICE";
+  vehicleCategoryId?: string;
+}>;
+
 function duplicateRegistration(error: unknown): never | void {
   if ((error as { code?: string }).code === "P2002")
     throw new ConflictError("DUPLICATE_REGISTRATION", "Vehicle registration already exists");
@@ -129,6 +137,25 @@ export async function listVehicles(client: TenantClient, context: TenantContext,
   return withTenantTransaction(client, context, (transaction) =>
     vehicleRepository.list(transaction, context, search?.trim() || undefined),
   );
+}
+
+/** Bounded list path for HTTP/API consumers; derives next-page state without COUNT(*). */
+export async function listVehiclesPage(
+  client: TenantClient,
+  context: TenantContext,
+  input: VehicleListPageInput,
+) {
+  requirePermission(context, "vehicles.read");
+  return withTenantTransaction(client, context, async (transaction) => {
+    const rows = await vehicleRepository.listPage(transaction, context, {
+      page: input.page,
+      pageSize: input.pageSize,
+      ...(input.q?.trim() ? { search: input.q.trim() } : {}),
+      ...(input.status ? { operationalStatus: input.status } : {}),
+      ...(input.vehicleCategoryId ? { vehicleCategoryId: input.vehicleCategoryId } : {}),
+    });
+    return { data: rows.slice(0, input.pageSize), hasNextPage: rows.length > input.pageSize };
+  });
 }
 
 export async function resolveVehicleRegistration(

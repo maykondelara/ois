@@ -53,6 +53,7 @@ import { createPasswordResetToken } from "../src/modules/identity/password.servi
 import { locationRepository } from "../src/modules/companies/location.repository";
 import { seedFoundation } from "../src/modules/identity/seed.service";
 import { resolveTenantContext } from "../src/modules/identity/tenant-context.service";
+import { runPhase3a3ApiAcceptance } from "./api-acceptance-runner";
 
 const url = process.env.DATABASE_URL ?? "";
 const migrator = "ois_validation_migrator";
@@ -1467,6 +1468,11 @@ async function main() {
       auditRows === 1,
   );
   checkpoint("audit_cross_tenant_isolation", crossTenantAuditRows === 0);
+  await runPhase3a3ApiAcceptance({
+    admin,
+    runtimeDatabaseUrl: runtimeUrl(),
+    checkpoint,
+  });
   const passwordPrisma = new PrismaClient({ datasources: { db: { url: runtimeUrl() } } });
   const issued = await issuePasswordReset(passwordPrisma, "a@validation.test");
   const storedToken = await admin.query(

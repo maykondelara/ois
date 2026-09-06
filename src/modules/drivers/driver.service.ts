@@ -14,6 +14,17 @@ import {
 } from "@/modules/drivers/driver.schemas";
 import { driverRepository } from "@/modules/drivers/driver.repository";
 
+export type DriverListPageInput = Readonly<{
+  page: number;
+  pageSize: number;
+  q?: string;
+  status?: "ACTIVE" | "INACTIVE" | "SUSPENDED" | "ON_LEAVE";
+  linked?: boolean;
+  vehicleCategoryId?: string;
+}>;
+
+export type PageResult<T> = Readonly<{ data: T[]; hasNextPage: boolean }>;
+
 type TenantClient = Pick<PrismaClient, "$transaction">;
 
 async function requireDriver(
@@ -82,6 +93,26 @@ export async function listDrivers(client: TenantClient, context: TenantContext, 
   return withTenantTransaction(client, context, (transaction) =>
     driverRepository.list(transaction, context, search?.trim() || undefined),
   );
+}
+
+/** Bounded list path for HTTP/API consumers; no unbounded route-level pagination. */
+export async function listDriversPage(
+  client: TenantClient,
+  context: TenantContext,
+  input: DriverListPageInput,
+): Promise<PageResult<Awaited<ReturnType<typeof driverRepository.list>>[number]>> {
+  requirePermission(context, "drivers.read");
+  return withTenantTransaction(client, context, async (transaction) => {
+    const rows = await driverRepository.listPage(transaction, context, {
+      page: input.page,
+      pageSize: input.pageSize,
+      ...(input.q?.trim() ? { search: input.q.trim() } : {}),
+      ...(input.status ? { operationalStatus: input.status } : {}),
+      ...(input.linked === undefined ? {} : { linked: input.linked }),
+      ...(input.vehicleCategoryId ? { vehicleCategoryId: input.vehicleCategoryId } : {}),
+    });
+    return { data: rows.slice(0, input.pageSize), hasNextPage: rows.length > input.pageSize };
+  });
 }
 
 export async function updateDriver(
@@ -208,6 +239,18 @@ export async function replaceDriverRegularAvailability(
   });
 }
 
+export async function listDriverRegularAvailability(
+  client: TenantClient,
+  context: TenantContext,
+  driverId: string,
+) {
+  requirePermission(context, "drivers.read");
+  return withTenantTransaction(client, context, async (transaction) => {
+    await requireDriver(transaction, context, driverId);
+    return driverRepository.listAvailability(transaction, context, driverId);
+  });
+}
+
 export async function grantDriverVehicleCapability(
   client: TenantClient,
   context: TenantContext,
@@ -236,6 +279,21 @@ export async function grantDriverVehicleCapability(
       },
     });
     return capability;
+  });
+}
+
+export async function listDriverVehicleCapabilities(
+  client: TenantClient,
+  context: TenantContext,
+  driverId: string,
+) {
+  requirePermission(context, "drivers.read");
+  return withTenantTransaction(client, context, async (transaction) => {
+    await requireDriver(transaction, context, driverId);
+    return transaction.driverVehicleCapability.findMany({
+      where: { companyId: context.companyId, driverId },
+      orderBy: { id: "asc" },
+    });
   });
 }
 

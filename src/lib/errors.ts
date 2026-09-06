@@ -13,6 +13,14 @@ export class AuthorizationError extends Error {
   }
 }
 
+/** Raised only when Stage 1 cannot establish an active TenantContext. */
+export class TenantContextUnavailableError extends AuthorizationError {
+  constructor() {
+    super("No active membership for the requested company");
+    this.name = "TenantContextUnavailableError";
+  }
+}
+
 export class DomainError extends Error {
   constructor(
     readonly code: string,
@@ -27,6 +35,14 @@ export class TenantRecordNotFoundError extends DomainError {
   constructor(resource: string) {
     super("TENANT_RECORD_NOT_FOUND", `${resource} not found`);
     this.name = "TenantRecordNotFoundError";
+  }
+}
+
+/** HTTP-safe concealment response for an unauthorised tenant selector. */
+export class TenantResourceNotFoundError extends DomainError {
+  constructor() {
+    super("TENANT_RESOURCE_NOT_FOUND", "Tenant resource not found");
+    this.name = "TenantResourceNotFoundError";
   }
 }
 

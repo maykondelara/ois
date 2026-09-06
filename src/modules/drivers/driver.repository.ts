@@ -4,6 +4,15 @@ import type { TenantContext } from "@/modules/identity/tenant-context";
 
 const scope = (context: TenantContext) => ({ companyId: context.companyId });
 
+export type DriverListPageInput = Readonly<{
+  page: number;
+  pageSize: number;
+  search?: string;
+  operationalStatus?: "ACTIVE" | "INACTIVE" | "SUSPENDED" | "ON_LEAVE";
+  linked?: boolean;
+  vehicleCategoryId?: string;
+}>;
+
 export const driverRepository = {
   findById(transaction: TenantTransaction, context: TenantContext, driverId: string) {
     return transaction.driver.findUnique({
@@ -17,7 +26,44 @@ export const driverRepository = {
         ...(search ? { displayName: { contains: search, mode: "insensitive" } } : {}),
         ...(context.role === "DRIVER" ? { userId: context.actorUserId } : {}),
       },
-      orderBy: { displayName: "asc" },
+      orderBy: [{ displayName: "asc" }, { id: "asc" }],
+    });
+  },
+  async listPage(
+    transaction: TenantTransaction,
+    context: TenantContext,
+    input: DriverListPageInput,
+  ) {
+    const driverIdsForCategory = input.vehicleCategoryId
+      ? (
+          await transaction.driverVehicleCapability.findMany({
+            where: {
+              ...scope(context),
+              vehicleCategoryId: input.vehicleCategoryId,
+              isActive: true,
+            },
+            select: { driverId: true },
+          })
+        ).map((capability) => capability.driverId)
+      : undefined;
+    return transaction.driver.findMany({
+      where: {
+        ...scope(context),
+        ...(input.search ? { displayName: { contains: input.search, mode: "insensitive" } } : {}),
+        ...(input.operationalStatus ? { operationalStatus: input.operationalStatus } : {}),
+        ...(input.linked === undefined ? {} : { userId: input.linked ? { not: null } : null }),
+        ...(driverIdsForCategory ? { id: { in: driverIdsForCategory } } : {}),
+        ...(context.role === "DRIVER" ? { userId: context.actorUserId } : {}),
+      },
+      orderBy: [{ displayName: "asc" }, { id: "asc" }],
+      skip: (input.page - 1) * input.pageSize,
+      take: input.pageSize + 1,
+    });
+  },
+  listAvailability(transaction: TenantTransaction, context: TenantContext, driverId: string) {
+    return transaction.driverRegularAvailability.findMany({
+      where: { ...scope(context), driverId },
+      orderBy: { dayOfWeek: "asc" },
     });
   },
   create(

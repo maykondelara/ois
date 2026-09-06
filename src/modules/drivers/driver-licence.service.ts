@@ -121,6 +121,23 @@ export async function addDriverLicence(
   });
 }
 
+/** Read-only, redacted licence access for Driver detail/API use. */
+export async function listDriverLicences(
+  client: TenantClient,
+  context: TenantContext,
+  driverId: string,
+): Promise<SafeDriverLicence[]> {
+  requirePermission(context, "drivers.read");
+  return withTenantTransaction(client, context, async (transaction) => {
+    await requireManagedDriver(transaction, context, driverId);
+    const licences = await transaction.driverLicence.findMany({
+      where: { companyId: context.companyId, driverId },
+      orderBy: [{ expiresOn: "asc" }, { id: "asc" }],
+    });
+    return licences.map(safeLicence);
+  });
+}
+
 export async function updateDriverLicence(
   client: TenantClient,
   context: TenantContext,
