@@ -83,8 +83,18 @@ const phase3aTables = [
   "vehicle_status_history",
   "vehicle_odometer_readings",
 ];
-const phase3aDeferredTables = [
+const phase3bTables = [
+  "document_types",
+  "compliance_requirements",
+  "compliance_requirement_assignments",
+  "compliance_requirement_exemptions",
+  "documents",
+  "stored_files",
   "document_files",
+  "driver_licence_files",
+  "document_review_history",
+];
+const phase3aDeferredTables = [
   "driver_documents",
   "vehicle_documents",
   "inspection_templates",
@@ -105,6 +115,8 @@ const membershipTenantReadMigration =
   "prisma/migrations/20260906000100_company_membership_tenant_read_rls_hardening/migration.sql";
 const membershipStage2ScopeCorrectionMigration =
   "prisma/migrations/20260906000200_company_membership_stage2_read_scope_correction/migration.sql";
+const phase3bFoundationMigration =
+  "prisma/migrations/20260906000300_phase3b_documents_compliance_foundation/migration.sql";
 const hardenedMembershipPolicies = [
   "memberships_select_bootstrap_or_tenant",
   "memberships_insert_self",
@@ -241,6 +253,29 @@ async function main() {
     );
     console.log("phase3a_migration_apply: PASS");
   }
+  const phase3bPresent = new Set(
+    (await admin.query("SELECT tablename FROM pg_tables WHERE schemaname='public'")).rows.map(
+      (x) => x.tablename,
+    ),
+  );
+  if (phase3bTables.every((name) => phase3bPresent.has(name))) {
+    console.log("phase3b_migration_apply: PASS (already applied)");
+  } else if (phase3bTables.some((name) => phase3bPresent.has(name))) {
+    throw new Error(
+      "phase3b_migration_apply: FAIL partial Phase 3B validation schema detected; manual review required before retry",
+    );
+  } else {
+    console.log("phase3b_migration_apply: START");
+    await m.query("BEGIN");
+    try {
+      await m.query(await readFile(phase3bFoundationMigration, "utf8"));
+      await m.query("COMMIT");
+    } catch (error) {
+      await m.query("ROLLBACK");
+      throw error;
+    }
+    console.log("phase3b_migration_apply: PASS");
+  }
   const membershipPolicies = await admin.query(
     "SELECT policyname FROM pg_policies WHERE schemaname='public' AND tablename='company_memberships'",
   );
@@ -292,6 +327,10 @@ async function main() {
     "SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = ANY($1::text[])",
     [phase3aTables],
   );
+  const phase3bRlsFlags = await admin.query(
+    "SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = ANY($1::text[])",
+    [phase3bTables],
+  );
   const migratedTables = await admin.query(
     "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename",
   );
@@ -314,10 +353,79 @@ async function main() {
     phase3aRlsFlags.rows.length === phase3aTables.length &&
       phase3aRlsFlags.rows.every((x) => x.relrowsecurity && x.relforcerowsecurity),
   );
+  checkpoint(
+    "phase3b_schema_validation",
+    phase3bTables.every((name) => migratedTables.rows.some((x) => x.tablename === name)),
+  );
+  checkpoint(
+    "phase3b_rls_validation",
+    phase3bRlsFlags.rows.length === phase3bTables.length &&
+      phase3bRlsFlags.rows.every((x) => x.relrowsecurity && x.relforcerowsecurity),
+  );
+  const phase3bUuidDefaults = await admin.query(
+    "SELECT c.relname, pg_get_expr(d.adbin, d.adrelid) AS expression FROM pg_attrdef d JOIN pg_attribute a ON a.attrelid=d.adrelid AND a.attnum=d.adnum JOIN pg_class c ON c.oid=d.adrelid WHERE c.relname = ANY($1::text[]) AND a.attname='id'",
+    [phase3bTables],
+  );
+  const phase3bConstraintRows = await admin.query(
+    "SELECT pg_get_constraintdef(con.oid) AS definition FROM pg_constraint con JOIN pg_class c ON c.oid=con.conrelid WHERE c.relname = ANY($1::text[])",
+    [[...phase3bTables, "driver_licences", "vehicle_categories"]],
+  );
+  const phase3bConstraintDefinitions = phase3bConstraintRows.rows
+    .map((row) => String(row.definition))
+    .join("\n");
+  const phase3bIndexes = await admin.query(
+    "SELECT indexname, indexdef FROM pg_indexes WHERE schemaname='public' AND tablename = ANY($1::text[])",
+    [[...phase3bTables, "driver_licences"]],
+  );
+  const phase3bIndexNames = new Set(phase3bIndexes.rows.map((row) => row.indexname));
+  checkpoint(
+    "phase3b_uuidv7_defaults",
+    phase3bUuidDefaults.rows.length === phase3bTables.length &&
+      phase3bUuidDefaults.rows.every((row) => String(row.expression).includes("uuidv7()")),
+  );
+  checkpoint(
+    "phase3b_tenant_safe_constraints",
+    phase3bConstraintDefinitions.includes(
+      "FOREIGN KEY (company_id, document_type_id, subject_type) REFERENCES document_types(company_id, id, subject_type)",
+    ) &&
+      phase3bConstraintDefinitions.includes(
+        "FOREIGN KEY (company_id, requirement_id, subject_type) REFERENCES compliance_requirements(company_id, id, subject_type)",
+      ) &&
+      phase3bConstraintDefinitions.includes(
+        "FOREIGN KEY (company_id, driver_id) REFERENCES drivers(company_id, id)",
+      ) &&
+      phase3bConstraintDefinitions.includes(
+        "FOREIGN KEY (company_id, vehicle_id) REFERENCES vehicles(company_id, id)",
+      ) &&
+      phase3bConstraintDefinitions.includes(
+        "FOREIGN KEY (company_id, driver_id, replaces_licence_id) REFERENCES driver_licences(company_id, driver_id, id)",
+      ),
+  );
+  checkpoint(
+    "phase3b_indexes_validation",
+    phase3bIndexNames.has("document_types_one_active_driver_licence_source_idx") &&
+      phase3bIndexNames.has("compliance_requirements_one_active_document_type_idx") &&
+      phase3bIndexNames.has("compliance_requirement_assignments_one_active_driver_idx") &&
+      phase3bIndexNames.has("compliance_requirement_assignments_one_active_vehicle_idx") &&
+      phase3bIndexNames.has("driver_licence_files_one_active_role_idx") &&
+      phase3bIndexNames.has("driver_licences_one_direct_successor_idx"),
+  );
+  const phase3bRuntimePrivileges = await admin.query(
+    "SELECT has_table_privilege($1, 'documents', 'SELECT,INSERT,UPDATE') AS documents, has_table_privilege($1, 'document_review_history', 'SELECT,INSERT') AS review_history, has_table_privilege($1, 'document_review_history', 'UPDATE') AS review_history_update, has_table_privilege($1, 'document_review_history', 'DELETE') AS review_history_delete, has_table_privilege($1, 'stored_files', 'DELETE') AS stored_files_delete",
+    [runtime],
+  );
+  checkpoint(
+    "phase3b_runtime_grants",
+    phase3bRuntimePrivileges.rows[0]?.documents === true &&
+      phase3bRuntimePrivileges.rows[0]?.review_history === true &&
+      phase3bRuntimePrivileges.rows[0]?.review_history_update === false &&
+      phase3bRuntimePrivileges.rows[0]?.review_history_delete === false &&
+      phase3bRuntimePrivileges.rows[0]?.stored_files_delete === false,
+  );
   console.log(JSON.stringify({ tables: migratedTables.rows.map((x) => x.tablename) }));
   console.log("bootstrap_rls_matrix: START");
   await admin.query(
-    "TRUNCATE activities, vehicle_status_history, vehicle_odometer_readings, driver_vehicle_capabilities, driver_licences, driver_regular_availability, drivers, vehicles, vehicle_categories, company_operational_settings, locations, company_memberships, accounts, sessions, password_reset_tokens, verification_tokens, companies, users",
+    "TRUNCATE activities, document_review_history, document_files, driver_licence_files, documents, stored_files, compliance_requirement_assignments, compliance_requirement_exemptions, compliance_requirements, document_types, vehicle_status_history, vehicle_odometer_readings, driver_vehicle_capabilities, driver_licences, driver_regular_availability, drivers, vehicles, vehicle_categories, company_operational_settings, locations, company_memberships, accounts, sessions, password_reset_tokens, verification_tokens, companies, users",
   );
   // Seed only capability/role definitions before creating isolated acceptance fixtures.
   const permissionSeedPrisma = new PrismaClient({ datasources: { db: { url } } });
@@ -383,6 +491,37 @@ async function main() {
       throw error;
     }
   };
+  const noCompanyDocumentTypes = await r.query("SELECT id FROM document_types");
+  const documentTypeA = await inRuntimeTenant(a, ca, async (client) => {
+    const result = await client.query(
+      "INSERT INTO document_types(company_id,code,name,subject_type,evidence_source_type) VALUES ($1,'RLS_DRIVER','RLS driver evidence','DRIVER','DOCUMENT') RETURNING id",
+      [ca],
+    );
+    return result.rows[0].id as string;
+  });
+  const documentTypeB = await inRuntimeTenant(b, cb, async (client) => {
+    const result = await client.query(
+      "INSERT INTO document_types(company_id,code,name,subject_type,evidence_source_type) VALUES ($1,'RLS_DRIVER','RLS driver evidence','DRIVER','DOCUMENT') RETURNING id",
+      [cb],
+    );
+    return result.rows[0].id as string;
+  });
+  const ownCompanyDocumentTypes = await inRuntimeTenant(a, ca, (client) =>
+    client.query("SELECT id FROM document_types WHERE id=$1", [documentTypeA]),
+  );
+  const foreignDocumentTypes = await inRuntimeTenant(a, ca, (client) =>
+    client.query("SELECT id FROM document_types WHERE id=$1", [documentTypeB]),
+  );
+  const foreignDocumentTypeWrite = await inRuntimeTenant(a, ca, (client) =>
+    client.query("UPDATE document_types SET name='blocked' WHERE id=$1", [documentTypeB]),
+  );
+  checkpoint(
+    "phase3b_runtime_rls_isolation",
+    noCompanyDocumentTypes.rowCount === 0 &&
+      ownCompanyDocumentTypes.rowCount === 1 &&
+      foreignDocumentTypes.rowCount === 0 &&
+      foreignDocumentTypeWrite.rowCount === 0,
+  );
   const noMembershipContext = await r.query(
     "SELECT company_id::text, user_id::text FROM company_memberships",
   );
@@ -526,7 +665,7 @@ async function main() {
     cb,
   ]);
   const categories = await admin.query(
-    "INSERT INTO vehicle_categories(company_id,code,name) VALUES ($1,'VAN','VAN'),($2,'VAN','VAN') RETURNING id,company_id",
+    "INSERT INTO vehicle_categories(company_id,code,name,required_licence_class) VALUES ($1,'VAN','VAN','C'),($2,'VAN','VAN','C') RETURNING id,company_id",
     [ca, cb],
   );
   const categoryA = categories.rows.find((row) => row.company_id === ca).id;
@@ -805,6 +944,21 @@ async function main() {
     applicationPrisma,
     applicationContext,
     true,
+  );
+  checkpoint(
+    "phase3b_vehicle_category_licence_classes",
+    [
+      ["VAN", "C"],
+      ["LR", "LR"],
+      ["MR", "MR"],
+      ["HR", "HR"],
+      ["HC", "HC"],
+      ["MC", "MC"],
+    ].every(([code, licenceClass]) =>
+      defaultCategories.some(
+        (category) => category.code === code && category.requiredLicenceClass === licenceClass,
+      ),
+    ),
   );
   const van = defaultCategories.find((category) => category.code === "VAN");
   if (!van) throw new Error("phase3a2 validation category fixture missing");
@@ -1451,6 +1605,306 @@ async function main() {
       (await listVehicles(applicationPrisma, applicationContextB)).every(
         (vehicle) => vehicle.companyId === cb,
       ),
+  );
+  // Phase 3B.1 is database-only: use the real runtime role for tenant-scoped
+  // DDL invariant probes. Application services deliberately remain out of scope.
+  const documentTypeCompany = await inRuntimeTenant(a, ca, async (client) => {
+    const result = await client.query(
+      "INSERT INTO document_types(company_id,code,name,subject_type,evidence_source_type) VALUES ($1,'RLS_COMPANY','RLS company evidence','COMPANY','DOCUMENT') RETURNING id",
+      [ca],
+    );
+    return result.rows[0].id as string;
+  });
+  const documentTypeVehicle = await inRuntimeTenant(a, ca, async (client) => {
+    const result = await client.query(
+      "INSERT INTO document_types(company_id,code,name,subject_type,evidence_source_type) VALUES ($1,'RLS_VEHICLE','RLS vehicle evidence','VEHICLE','DOCUMENT') RETURNING id",
+      [ca],
+    );
+    return result.rows[0].id as string;
+  });
+  const driverRequirement = await inRuntimeTenant(a, ca, async (client) => {
+    const result = await client.query(
+      "INSERT INTO compliance_requirements(company_id,document_type_id,subject_type,applicability,name) VALUES ($1,$2,'DRIVER','GLOBAL','RLS driver requirement') RETURNING id",
+      [ca, documentTypeA],
+    );
+    return result.rows[0].id as string;
+  });
+  const validDocument = await inRuntimeTenant(a, ca, async (client) => {
+    const result = await client.query(
+      "INSERT INTO documents(company_id,document_type_id,subject_type,driver_id,created_by_user_id) VALUES ($1,$2,'DRIVER',$3,$4) RETURNING id",
+      [ca, documentTypeA, linkedDriver.id, a],
+    );
+    return result.rows[0].id as string;
+  });
+  const invalidDocumentTypeTenant = await isDenied(() =>
+    inRuntimeTenant(a, ca, (client) =>
+      client.query(
+        "INSERT INTO documents(company_id,document_type_id,subject_type,driver_id,created_by_user_id) VALUES ($1,$2,'DRIVER',$3,$4)",
+        [ca, documentTypeB, linkedDriver.id, a],
+      ),
+    ),
+  );
+  const invalidDocumentSubject = await isDenied(() =>
+    inRuntimeTenant(a, ca, (client) =>
+      client.query(
+        "INSERT INTO documents(company_id,document_type_id,subject_type,vehicle_id,created_by_user_id) VALUES ($1,$2,'DRIVER',$3,$4)",
+        [ca, documentTypeA, serviceVehicle.id, a],
+      ),
+    ),
+  );
+  const invalidRequirementSubject = await isDenied(() =>
+    inRuntimeTenant(a, ca, (client) =>
+      client.query(
+        "INSERT INTO compliance_requirements(company_id,document_type_id,subject_type,applicability,name) VALUES ($1,$2,'VEHICLE','GLOBAL','Invalid subject')",
+        [ca, documentTypeA],
+      ),
+    ),
+  );
+  const invalidCompanyRequirement = await isDenied(() =>
+    inRuntimeTenant(a, ca, (client) =>
+      client.query(
+        "INSERT INTO compliance_requirements(company_id,document_type_id,subject_type,applicability,name) VALUES ($1,$2,'COMPANY','SPECIFIC','Invalid company applicability')",
+        [ca, documentTypeCompany],
+      ),
+    ),
+  );
+  const companyRequirement = await inRuntimeTenant(a, ca, async (client) => {
+    const result = await client.query(
+      "INSERT INTO compliance_requirements(company_id,document_type_id,subject_type,applicability,name) VALUES ($1,$2,'COMPANY','GLOBAL','RLS company requirement') RETURNING id",
+      [ca, documentTypeCompany],
+    );
+    return result.rows[0].id as string;
+  });
+  const duplicateActiveRequirement = await isDenied(() =>
+    inRuntimeTenant(a, ca, (client) =>
+      client.query(
+        "INSERT INTO compliance_requirements(company_id,document_type_id,subject_type,applicability,name) VALUES ($1,$2,'DRIVER','GLOBAL','Duplicate requirement')",
+        [ca, documentTypeA],
+      ),
+    ),
+  );
+  const validAssignment = await inRuntimeTenant(a, ca, (client) =>
+    client.query(
+      "INSERT INTO compliance_requirement_assignments(company_id,requirement_id,subject_type,driver_id,assigned_by_user_id) VALUES ($1,$2,'DRIVER',$3,$4)",
+      [ca, driverRequirement, linkedDriver.id, a],
+    ),
+  );
+  const invalidAssignment = await isDenied(() =>
+    inRuntimeTenant(a, ca, (client) =>
+      client.query(
+        "INSERT INTO compliance_requirement_assignments(company_id,requirement_id,subject_type,driver_id,vehicle_id,assigned_by_user_id) VALUES ($1,$2,'DRIVER',$3,$4,$5)",
+        [ca, driverRequirement, linkedDriver.id, serviceVehicle.id, a],
+      ),
+    ),
+  );
+  const duplicateActiveAssignment = await isDenied(() =>
+    inRuntimeTenant(a, ca, (client) =>
+      client.query(
+        "INSERT INTO compliance_requirement_assignments(company_id,requirement_id,subject_type,driver_id,assigned_by_user_id) VALUES ($1,$2,'DRIVER',$3,$4)",
+        [ca, driverRequirement, linkedDriver.id, a],
+      ),
+    ),
+  );
+  const invalidAssignmentRemoval = await isDenied(() =>
+    inRuntimeTenant(a, ca, (client) =>
+      client.query(
+        "UPDATE compliance_requirement_assignments SET removed_at=now() WHERE company_id=$1 AND requirement_id=$2 AND driver_id=$3",
+        [ca, driverRequirement, linkedDriver.id],
+      ),
+    ),
+  );
+  const invalidExemption = await isDenied(() =>
+    inRuntimeTenant(a, ca, (client) =>
+      client.query(
+        "INSERT INTO compliance_requirement_exemptions(company_id,requirement_id,subject_type,company_subject_id,reason,effective_from,granted_by_user_id) VALUES ($1,$2,'COMPANY',$3,'Invalid company subject',current_date,$4)",
+        [ca, companyRequirement, cb, a],
+      ),
+    ),
+  );
+  const invalidExemptionDates = await isDenied(() =>
+    inRuntimeTenant(a, ca, (client) =>
+      client.query(
+        "INSERT INTO compliance_requirement_exemptions(company_id,requirement_id,subject_type,driver_id,reason,effective_from,expires_on,granted_by_user_id) VALUES ($1,$2,'DRIVER',$3,'Invalid date range','2030-01-02','2030-01-01',$4)",
+        [ca, driverRequirement, linkedDriver.id, a],
+      ),
+    ),
+  );
+  const invalidDocumentReview = await isDenied(() =>
+    inRuntimeTenant(a, ca, (client) =>
+      client.query(
+        "INSERT INTO documents(company_id,document_type_id,subject_type,driver_id,reviewed_at,created_by_user_id) VALUES ($1,$2,'DRIVER',$3,now(),$4)",
+        [ca, documentTypeA, linkedDriver.id, a],
+      ),
+    ),
+  );
+  const invalidDocumentArchive = await isDenied(() =>
+    inRuntimeTenant(a, ca, (client) =>
+      client.query("UPDATE documents SET archived_at=now() WHERE id=$1", [validDocument]),
+    ),
+  );
+  const invalidDocumentRevocation = await isDenied(() =>
+    inRuntimeTenant(a, ca, (client) =>
+      client.query("UPDATE documents SET revoked_at=now() WHERE id=$1", [validDocument]),
+    ),
+  );
+  const invalidAvailableFile = await isDenied(() =>
+    inRuntimeTenant(a, ca, (client) =>
+      client.query(
+        "INSERT INTO stored_files(company_id,storage_provider,bucket,object_key,original_filename,file_state,created_by_user_id) VALUES ($1,'validation','private','missing-metadata','evidence.pdf','AVAILABLE',$2)",
+        [ca, a],
+      ),
+    ),
+  );
+  const invalidSha256 = await isDenied(() =>
+    inRuntimeTenant(a, ca, (client) =>
+      client.query(
+        "INSERT INTO stored_files(company_id,storage_provider,bucket,object_key,original_filename,sha256,created_by_user_id) VALUES ($1,'validation','private','bad-hash','evidence.pdf',decode('aa','hex'),$2)",
+        [ca, a],
+      ),
+    ),
+  );
+  const invalidAvailableSize = await isDenied(() =>
+    inRuntimeTenant(a, ca, (client) =>
+      client.query(
+        "INSERT INTO stored_files(company_id,storage_provider,bucket,object_key,original_filename,mime_type,size_bytes,sha256,file_state,created_by_user_id) VALUES ($1,'validation','private','bad-size','evidence.pdf','application/pdf',0,decode(repeat('aa',32),'hex'),'AVAILABLE',$2)",
+        [ca, a],
+      ),
+    ),
+  );
+  const oversizedAvailableFile = await isDenied(() =>
+    inRuntimeTenant(a, ca, (client) =>
+      client.query(
+        "INSERT INTO stored_files(company_id,storage_provider,bucket,object_key,original_filename,mime_type,size_bytes,sha256,file_state,created_by_user_id) VALUES ($1,'validation','private','oversized','evidence.pdf','application/pdf',10485761,decode(repeat('aa',32),'hex'),'AVAILABLE',$2)",
+        [ca, a],
+      ),
+    ),
+  );
+  const validStoredFile = await inRuntimeTenant(a, ca, async (client) => {
+    const result = await client.query(
+      "INSERT INTO stored_files(company_id,storage_provider,bucket,object_key,original_filename,mime_type,size_bytes,sha256,file_state,created_by_user_id) VALUES ($1,'validation','private','valid-document','evidence.pdf','application/pdf',1024,decode(repeat('aa',32),'hex'),'AVAILABLE',$2) RETURNING id",
+      [ca, a],
+    );
+    return result.rows[0].id as string;
+  });
+  const duplicateObjectKey = await isDenied(() =>
+    inRuntimeTenant(b, cb, (client) =>
+      client.query(
+        "INSERT INTO stored_files(company_id,storage_provider,bucket,object_key,original_filename,created_by_user_id) VALUES ($1,'validation','private','valid-document','other.pdf',$2)",
+        [cb, b],
+      ),
+    ),
+  );
+  await inRuntimeTenant(a, ca, (client) =>
+    client.query(
+      "INSERT INTO document_files(company_id,document_id,stored_file_id,attached_by_user_id) VALUES ($1,$2,$3,$4)",
+      [ca, validDocument, validStoredFile, a],
+    ),
+  );
+  const duplicateDocumentFile = await isDenied(() =>
+    inRuntimeTenant(a, ca, (client) =>
+      client.query(
+        "INSERT INTO document_files(company_id,document_id,stored_file_id,attached_by_user_id) VALUES ($1,$2,$3,$4)",
+        [ca, validDocument, validStoredFile, a],
+      ),
+    ),
+  );
+  const licenceStoredFile = await inRuntimeTenant(a, ca, async (client) => {
+    const result = await client.query(
+      "INSERT INTO stored_files(company_id,storage_provider,bucket,object_key,original_filename,created_by_user_id) VALUES ($1,'validation','private','licence-front','licence-front.jpg',$2) RETURNING id",
+      [ca, a],
+    );
+    return result.rows[0].id as string;
+  });
+  const secondLicenceStoredFile = await inRuntimeTenant(a, ca, async (client) => {
+    const result = await client.query(
+      "INSERT INTO stored_files(company_id,storage_provider,bucket,object_key,original_filename,created_by_user_id) VALUES ($1,'validation','private','licence-front-second','licence-front-2.jpg',$2) RETURNING id",
+      [ca, a],
+    );
+    return result.rows[0].id as string;
+  });
+  await inRuntimeTenant(a, ca, (client) =>
+    client.query(
+      "INSERT INTO driver_licence_files(company_id,driver_licence_id,stored_file_id,role,attached_by_user_id) VALUES ($1,$2,$3,'FRONT',$4)",
+      [ca, licence.id, licenceStoredFile, a],
+    ),
+  );
+  const duplicateLicenceAttachmentFile = await isDenied(() =>
+    inRuntimeTenant(a, ca, (client) =>
+      client.query(
+        "INSERT INTO driver_licence_files(company_id,driver_licence_id,stored_file_id,role,attached_by_user_id) VALUES ($1,$2,$3,'FRONT',$4)",
+        [ca, licence.id, licenceStoredFile, a],
+      ),
+    ),
+  );
+  const duplicateLicenceAttachmentRole = await isDenied(() =>
+    inRuntimeTenant(a, ca, (client) =>
+      client.query(
+        "INSERT INTO driver_licence_files(company_id,driver_licence_id,stored_file_id,role,attached_by_user_id) VALUES ($1,$2,$3,'FRONT',$4)",
+        [ca, licence.id, secondLicenceStoredFile, a],
+      ),
+    ),
+  );
+  const selfReplacingLicence = await isDenied(() =>
+    inRuntimeTenant(a, ca, (client) =>
+      client.query("UPDATE driver_licences SET replaces_licence_id=id WHERE id=$1", [licence.id]),
+    ),
+  );
+  const successorLicence = await inRuntimeTenant(a, ca, async (client) => {
+    const result = await client.query(
+      "INSERT INTO driver_licences(company_id,driver_id,licence_number_ciphertext,licence_number_lookup_hash,licence_number_last4,licence_number_key_version,expires_on,valid_from,replaces_licence_id) VALUES ($1,$2,'phase3b-successor',decode(repeat('bb',32),'hex'),'9999','validation','2035-01-01','2034-01-01',$3) RETURNING id",
+      [ca, linkedDriver.id, licence.id],
+    );
+    return result.rows[0].id as string;
+  });
+  const secondDirectSuccessor = await isDenied(() =>
+    inRuntimeTenant(a, ca, (client) =>
+      client.query(
+        "INSERT INTO driver_licences(company_id,driver_id,licence_number_ciphertext,licence_number_lookup_hash,licence_number_last4,licence_number_key_version,expires_on,valid_from,replaces_licence_id) VALUES ($1,$2,'phase3b-second',decode(repeat('cc',32),'hex'),'8888','validation','2035-01-01','2034-01-01',$3)",
+        [ca, linkedDriver.id, licence.id],
+      ),
+    ),
+  );
+  const crossDriverReplacement = await isDenied(() =>
+    inRuntimeTenant(a, ca, (client) =>
+      client.query(
+        "INSERT INTO driver_licences(company_id,driver_id,licence_number_ciphertext,licence_number_lookup_hash,licence_number_last4,licence_number_key_version,expires_on,valid_from,replaces_licence_id) VALUES ($1,$2,'phase3b-cross-driver',decode(repeat('dd',32),'hex'),'7777','validation','2035-01-01','2034-01-01',$3)",
+        [ca, otherDriver.id, licence.id],
+      ),
+    ),
+  );
+  const invalidLicenceRevocation = await isDenied(() =>
+    inRuntimeTenant(a, ca, (client) =>
+      client.query("UPDATE driver_licences SET revoked_at=now() WHERE id=$1", [successorLicence]),
+    ),
+  );
+  checkpoint(
+    "phase3b_constraints_and_file_integrity",
+    validAssignment.rowCount === 1 &&
+      invalidDocumentTypeTenant &&
+      invalidDocumentSubject &&
+      invalidRequirementSubject &&
+      invalidCompanyRequirement &&
+      duplicateActiveRequirement &&
+      invalidAssignment &&
+      duplicateActiveAssignment &&
+      invalidAssignmentRemoval &&
+      invalidExemption &&
+      invalidExemptionDates &&
+      invalidDocumentReview &&
+      invalidDocumentArchive &&
+      invalidDocumentRevocation &&
+      invalidAvailableFile &&
+      invalidSha256 &&
+      invalidAvailableSize &&
+      oversizedAvailableFile &&
+      duplicateObjectKey &&
+      duplicateDocumentFile &&
+      duplicateLicenceAttachmentFile &&
+      duplicateLicenceAttachmentRole &&
+      selfReplacingLicence &&
+      secondDirectSuccessor &&
+      crossDriverReplacement &&
+      invalidLicenceRevocation,
   );
   const auditRows = await withTenantTransaction(applicationPrisma, applicationContext, (tx) =>
     tx.activity.count({ where: { action: "tenant_context.established", actorUserId: a } }),

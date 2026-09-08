@@ -17,7 +17,11 @@ export const permissionCodes = [
   "maintenance.read",
   "maintenance.manage",
   "documents.read",
+  "documents.file.read",
   "documents.manage",
+  "documents.review",
+  "compliance.read",
+  "compliance.manage",
   "reports.read",
   "integrations.read",
   "integrations.manage",
@@ -50,7 +54,11 @@ export const rolePermissionMatrix: Record<RoleCode, readonly PermissionCode[]> =
     "maintenance.read",
     "maintenance.manage",
     "documents.read",
+    "documents.file.read",
     "documents.manage",
+    "documents.review",
+    "compliance.read",
+    "compliance.manage",
     "reports.read",
   ],
   SUPERVISOR: [
@@ -68,6 +76,10 @@ export const rolePermissionMatrix: Record<RoleCode, readonly PermissionCode[]> =
     "tasks.manage",
     "maintenance.read",
     "documents.read",
+    "documents.file.read",
+    "documents.manage",
+    "documents.review",
+    "compliance.read",
   ],
   DRIVER: [
     "drivers.read",
@@ -75,6 +87,8 @@ export const rolePermissionMatrix: Record<RoleCode, readonly PermissionCode[]> =
     "vehicles.odometer.submit",
     "inspections.submit",
     "documents.read",
+    "documents.file.read",
+    "compliance.read",
   ],
 };
 

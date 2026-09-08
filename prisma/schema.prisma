@@ -44,132 +44,201 @@ enum InspectionVehicleSelectionStrategy {
   BOTH
 }
 
+enum ComplianceSubjectType {
+  DRIVER
+  VEHICLE
+  COMPANY
+}
+
+enum EvidenceSourceType {
+  DOCUMENT
+  DRIVER_LICENCE
+}
+
+enum RequirementApplicability {
+  GLOBAL
+  SPECIFIC
+}
+
+enum DocumentReviewStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum StoredFileState {
+  PENDING
+  AVAILABLE
+  QUARANTINED
+}
+
+enum DriverLicenceFileRole {
+  FRONT
+  BACK
+  COMBINED
+}
+
+enum DriverLicenceClass {
+  C
+  LR
+  MR
+  HR
+  HC
+  MC
+}
+
 model Company {
-  id String @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  name String
-  slug String @unique
-  timezone String @default("Australia/Perth")
-  status String @default("ACTIVE")
+  id        String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name      String
+  slug      String   @unique
+  timezone  String   @default("Australia/Perth")
+  status    String   @default("ACTIVE")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+
   @@map("companies")
 }
+
 model User {
-  id String @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  email String @unique
-  name String?
-  passwordHash String? @map("password_hash")
-  accountStatus String @default("PENDING_ACTIVATION") @map("account_status")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id            String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  email         String   @unique
+  name          String?
+  passwordHash  String?  @map("password_hash")
+  accountStatus String   @default("PENDING_ACTIVATION") @map("account_status")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
   @@map("users")
 }
+
 model Role {
-  id String @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  code String @unique
-  name String
+  id          String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  code        String  @unique
+  name        String
   description String?
+
   @@map("roles")
 }
+
 model Permission {
-  id String @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  code String @unique
+  id          String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  code        String  @unique
   description String?
+
   @@map("permissions")
 }
+
 model RolePermission {
-  roleId String @map("role_id") @db.Uuid
+  roleId       String @map("role_id") @db.Uuid
   permissionId String @map("permission_id") @db.Uuid
-  @@id([roleId,permissionId])
+
+  @@id([roleId, permissionId])
   @@map("role_permissions")
 }
+
 model CompanyMembership {
-  id String @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  companyId String @map("company_id") @db.Uuid
-  userId String @map("user_id") @db.Uuid
-  roleId String @map("role_id") @db.Uuid
-  status String @default("ACTIVE")
+  id        String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  roleId    String   @map("role_id") @db.Uuid
+  status    String   @default("ACTIVE")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
-  @@unique([companyId,userId])
-  @@unique([companyId,id])
-  @@index([userId,status])
+
+  @@unique([companyId, userId])
+  @@unique([companyId, id])
+  @@index([userId, status])
   @@map("company_memberships")
 }
+
 model Location {
-  id String @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  companyId String @map("company_id") @db.Uuid
-  name String
-  address String?
-  status String @default("ACTIVE")
+  id        String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
+  name      String
+  address   String?
+  status    String   @default("ACTIVE")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
-  @@unique([companyId,id])
-  @@unique([companyId,name])
+
+  @@unique([companyId, id])
+  @@unique([companyId, name])
   @@map("locations")
 }
+
 model Activity {
-  id String @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  companyId String? @map("company_id") @db.Uuid
-  actorUserId String? @map("actor_user_id") @db.Uuid
-  action String
-  entityType String @map("entity_type")
-  entityId String? @map("entity_id") @db.Uuid
-  requestId String? @map("request_id")
-  metadata Json?
-  occurredAt DateTime @default(now()) @map("occurred_at")
-  @@index([companyId,occurredAt])
+  id          String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId   String?  @map("company_id") @db.Uuid
+  actorUserId String?  @map("actor_user_id") @db.Uuid
+  action      String
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id") @db.Uuid
+  requestId   String?  @map("request_id")
+  metadata    Json?
+  occurredAt  DateTime @default(now()) @map("occurred_at")
+
+  @@index([companyId, occurredAt])
   @@map("activities")
 }
+
 model Account {
-  id String @id @default(cuid())
-  userId String @map("user_id") @db.Uuid
-  type String
-  provider String
+  id                String @id @default(cuid())
+  userId            String @map("user_id") @db.Uuid
+  type              String
+  provider          String
   providerAccountId String @map("provider_account_id")
-  @@unique([provider,providerAccountId])
+
+  @@unique([provider, providerAccountId])
   @@map("accounts")
 }
+
 model Session {
-  id String @id @default(cuid())
-  sessionToken String @unique @map("session_token")
-  userId String @map("user_id") @db.Uuid
-  expires DateTime
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id") @db.Uuid
+  expires      DateTime
+
   @@map("sessions")
 }
+
 model VerificationToken {
   identifier String
-  token String @unique
-  expires DateTime
-  @@unique([identifier,token])
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
   @@map("verification_tokens")
 }
+
 model PasswordResetToken {
-  id String @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  userId String @map("user_id") @db.Uuid
-  tokenHash String @unique @map("token_hash")
-  expiresAt DateTime @map("expires_at")
-  usedAt DateTime? @map("used_at")
+  id        String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+
   @@map("password_reset_tokens")
 }
 
 model CompanyOperationalSettings {
-  companyId                           String                           @id @map("company_id") @db.Uuid
-  odometerExpectedIncreaseThresholdKm Int                              @default(1000) @map("odometer_expected_increase_threshold_km")
+  companyId                           String                             @id @map("company_id") @db.Uuid
+  odometerExpectedIncreaseThresholdKm Int                                @default(1000) @map("odometer_expected_increase_threshold_km")
   inspectionVehicleSelectionStrategy  InspectionVehicleSelectionStrategy @default(BOTH) @map("inspection_vehicle_selection_strategy")
-  createdAt                           DateTime                         @default(now()) @map("created_at")
-  updatedAt                           DateTime                         @updatedAt @map("updated_at")
+  createdAt                           DateTime                           @default(now()) @map("created_at")
+  updatedAt                           DateTime                           @updatedAt @map("updated_at")
+
   @@map("company_operational_settings")
 }
 
 model VehicleCategory {
-  id        String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  companyId String   @map("company_id") @db.Uuid
-  code      String
-  name      String
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id                   String              @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId            String              @map("company_id") @db.Uuid
+  code                 String
+  name                 String
+  isActive             Boolean             @default(true) @map("is_active")
+  requiredLicenceClass DriverLicenceClass? @map("required_licence_class")
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
+
   @@unique([companyId, code])
   @@unique([companyId, id])
   @@index([companyId, isActive])
@@ -177,18 +246,19 @@ model VehicleCategory {
 }
 
 model Driver {
-  id                       String                  @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  companyId                String                  @map("company_id") @db.Uuid
-  userId                   String?                 @map("user_id") @db.Uuid
-  displayName              String                  @map("display_name")
-  phoneE164                String?                 @map("phone_e164")
-  operationalStatus        DriverOperationalStatus @default(ACTIVE) @map("operational_status")
-  depotLocationId          String?                 @map("depot_location_id") @db.Uuid
-  emergencyContactName     String?                 @map("emergency_contact_name")
-  emergencyContactPhoneE164 String?                @map("emergency_contact_phone_e164")
-  archivedAt               DateTime?               @map("archived_at")
-  createdAt                DateTime                @default(now()) @map("created_at")
-  updatedAt                DateTime                @updatedAt @map("updated_at")
+  id                        String                  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId                 String                  @map("company_id") @db.Uuid
+  userId                    String?                 @map("user_id") @db.Uuid
+  displayName               String                  @map("display_name")
+  phoneE164                 String?                 @map("phone_e164")
+  operationalStatus         DriverOperationalStatus @default(ACTIVE) @map("operational_status")
+  depotLocationId           String?                 @map("depot_location_id") @db.Uuid
+  emergencyContactName      String?                 @map("emergency_contact_name")
+  emergencyContactPhoneE164 String?                 @map("emergency_contact_phone_e164")
+  archivedAt                DateTime?               @map("archived_at")
+  createdAt                 DateTime                @default(now()) @map("created_at")
+  updatedAt                 DateTime                @updatedAt @map("updated_at")
+
   @@unique([companyId, id])
   @@unique([companyId, userId])
   @@index([companyId, operationalStatus])
@@ -204,6 +274,7 @@ model DriverRegularAvailability {
   isAvailable Boolean  @default(false) @map("is_available")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
+
   @@unique([companyId, driverId, dayOfWeek])
   @@unique([companyId, id])
   @@index([companyId, driverId])
@@ -211,36 +282,223 @@ model DriverRegularAvailability {
 }
 
 model DriverLicence {
-  id                      String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  companyId               String   @map("company_id") @db.Uuid
-  driverId                String   @map("driver_id") @db.Uuid
-  licenceType             String   @default("DRIVER_LICENCE") @map("licence_type")
-  issuingJurisdiction     String?  @map("issuing_jurisdiction")
-  licenceNumberCiphertext String   @map("licence_number_ciphertext")
-  licenceNumberLookupHash Bytes    @map("licence_number_lookup_hash")
-  licenceNumberLast4      String   @map("licence_number_last4")
-  licenceNumberKeyVersion String   @map("licence_number_key_version")
-  issuedOn                DateTime? @db.Date @map("issued_on")
-  expiresOn               DateTime @db.Date @map("expires_on")
-  createdAt               DateTime @default(now()) @map("created_at")
-  updatedAt               DateTime @updatedAt @map("updated_at")
+  id                      String              @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId               String              @map("company_id") @db.Uuid
+  driverId                String              @map("driver_id") @db.Uuid
+  licenceType             String              @default("DRIVER_LICENCE") @map("licence_type")
+  issuingJurisdiction     String?             @map("issuing_jurisdiction")
+  licenceNumberCiphertext String              @map("licence_number_ciphertext")
+  licenceNumberLookupHash Bytes               @map("licence_number_lookup_hash")
+  licenceNumberLast4      String              @map("licence_number_last4")
+  licenceNumberKeyVersion String              @map("licence_number_key_version")
+  issuedOn                DateTime?           @map("issued_on") @db.Date
+  expiresOn               DateTime            @map("expires_on") @db.Date
+  licenceClass            DriverLicenceClass? @map("licence_class")
+  validFrom               DateTime?           @map("valid_from") @db.Date
+  replacesLicenceId       String?             @map("replaces_licence_id") @db.Uuid
+  revokedAt               DateTime?           @map("revoked_at")
+  revokedByUserId         String?             @map("revoked_by_user_id") @db.Uuid
+  revocationReason        String?             @map("revocation_reason")
+  createdAt               DateTime            @default(now()) @map("created_at")
+  updatedAt               DateTime            @updatedAt @map("updated_at")
+
   @@unique([companyId, licenceNumberLookupHash])
   @@unique([companyId, id])
+  @@unique([companyId, driverId, id])
   @@index([companyId, driverId, expiresOn])
   @@map("driver_licences")
 }
 
+model DocumentType {
+  id                 String                @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId          String                @map("company_id") @db.Uuid
+  code               String
+  name               String
+  description        String?
+  subjectType        ComplianceSubjectType @map("subject_type")
+  evidenceSourceType EvidenceSourceType    @map("evidence_source_type")
+  requiresIssueDate  Boolean               @default(false) @map("requires_issue_date")
+  requiresExpiryDate Boolean               @default(false) @map("requires_expiry_date")
+  isActive           Boolean               @default(true) @map("is_active")
+  createdAt          DateTime              @default(now()) @map("created_at")
+  updatedAt          DateTime              @updatedAt @map("updated_at")
+
+  @@unique([companyId, id])
+  @@unique([companyId, code])
+  @@unique([companyId, id, subjectType])
+  @@map("document_types")
+}
+
+model ComplianceRequirement {
+  id                String                   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId         String                   @map("company_id") @db.Uuid
+  documentTypeId    String                   @map("document_type_id") @db.Uuid
+  subjectType       ComplianceSubjectType    @map("subject_type")
+  applicability     RequirementApplicability
+  name              String
+  description       String?
+  expiryWarningDays Int                      @default(30) @map("expiry_warning_days")
+  isActive          Boolean                  @default(true) @map("is_active")
+  createdAt         DateTime                 @default(now()) @map("created_at")
+  updatedAt         DateTime                 @updatedAt @map("updated_at")
+
+  @@unique([companyId, id])
+  @@unique([companyId, id, subjectType])
+  @@map("compliance_requirements")
+}
+
+model ComplianceRequirementAssignment {
+  id               String                @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId        String                @map("company_id") @db.Uuid
+  requirementId    String                @map("requirement_id") @db.Uuid
+  subjectType      ComplianceSubjectType @map("subject_type")
+  driverId         String?               @map("driver_id") @db.Uuid
+  vehicleId        String?               @map("vehicle_id") @db.Uuid
+  assignedAt       DateTime              @default(now()) @map("assigned_at")
+  assignedByUserId String                @map("assigned_by_user_id") @db.Uuid
+  removedAt        DateTime?             @map("removed_at")
+  removedByUserId  String?               @map("removed_by_user_id") @db.Uuid
+  removalReason    String?               @map("removal_reason")
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
+
+  @@unique([companyId, id])
+  @@map("compliance_requirement_assignments")
+}
+
+model ComplianceRequirementExemption {
+  id               String                @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId        String                @map("company_id") @db.Uuid
+  requirementId    String                @map("requirement_id") @db.Uuid
+  subjectType      ComplianceSubjectType @map("subject_type")
+  driverId         String?               @map("driver_id") @db.Uuid
+  vehicleId        String?               @map("vehicle_id") @db.Uuid
+  companySubjectId String?               @map("company_subject_id") @db.Uuid
+  reason           String
+  effectiveFrom    DateTime              @map("effective_from") @db.Date
+  expiresOn        DateTime?             @map("expires_on") @db.Date
+  grantedAt        DateTime              @default(now()) @map("granted_at")
+  grantedByUserId  String                @map("granted_by_user_id") @db.Uuid
+  revokedAt        DateTime?             @map("revoked_at")
+  revokedByUserId  String?               @map("revoked_by_user_id") @db.Uuid
+  revocationReason String?               @map("revocation_reason")
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
+
+  @@unique([companyId, id])
+  @@map("compliance_requirement_exemptions")
+}
+
+model Document {
+  id               String                @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId        String                @map("company_id") @db.Uuid
+  documentTypeId   String                @map("document_type_id") @db.Uuid
+  subjectType      ComplianceSubjectType @map("subject_type")
+  driverId         String?               @map("driver_id") @db.Uuid
+  vehicleId        String?               @map("vehicle_id") @db.Uuid
+  companySubjectId String?               @map("company_subject_id") @db.Uuid
+  issueDate        DateTime?             @map("issue_date") @db.Date
+  validFrom        DateTime?             @map("valid_from") @db.Date
+  expiryDate       DateTime?             @map("expiry_date") @db.Date
+  reviewStatus     DocumentReviewStatus  @default(PENDING_REVIEW) @map("review_status")
+  reviewedAt       DateTime?             @map("reviewed_at")
+  reviewedByUserId String?               @map("reviewed_by_user_id") @db.Uuid
+  rejectionReason  String?               @map("rejection_reason")
+  archivedAt       DateTime?             @map("archived_at")
+  archivedByUserId String?               @map("archived_by_user_id") @db.Uuid
+  revokedAt        DateTime?             @map("revoked_at")
+  revokedByUserId  String?               @map("revoked_by_user_id") @db.Uuid
+  revocationReason String?               @map("revocation_reason")
+  createdByUserId  String                @map("created_by_user_id") @db.Uuid
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
+
+  @@unique([companyId, id])
+  @@map("documents")
+}
+
+model StoredFile {
+  id               String          @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId        String          @map("company_id") @db.Uuid
+  storageProvider  String          @map("storage_provider")
+  bucket           String
+  objectKey        String          @map("object_key")
+  originalFilename String          @map("original_filename")
+  mimeType         String?         @map("mime_type")
+  sizeBytes        Int?            @map("size_bytes")
+  sha256           Bytes?
+  fileState        StoredFileState @default(PENDING) @map("file_state")
+  createdByUserId  String          @map("created_by_user_id") @db.Uuid
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  @@unique([companyId, id])
+  @@unique([storageProvider, bucket, objectKey])
+  @@map("stored_files")
+}
+
+model DocumentFile {
+  id               String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId        String    @map("company_id") @db.Uuid
+  documentId       String    @map("document_id") @db.Uuid
+  storedFileId     String    @map("stored_file_id") @db.Uuid
+  attachedAt       DateTime  @default(now()) @map("attached_at")
+  attachedByUserId String    @map("attached_by_user_id") @db.Uuid
+  removedAt        DateTime? @map("removed_at")
+  removedByUserId  String?   @map("removed_by_user_id") @db.Uuid
+  removalReason    String?   @map("removal_reason")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  @@unique([companyId, id])
+  @@unique([companyId, storedFileId])
+  @@map("document_files")
+}
+
+model DriverLicenceFile {
+  id               String                @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId        String                @map("company_id") @db.Uuid
+  driverLicenceId  String                @map("driver_licence_id") @db.Uuid
+  storedFileId     String                @map("stored_file_id") @db.Uuid
+  role             DriverLicenceFileRole
+  attachedAt       DateTime              @default(now()) @map("attached_at")
+  attachedByUserId String                @map("attached_by_user_id") @db.Uuid
+  removedAt        DateTime?             @map("removed_at")
+  removedByUserId  String?               @map("removed_by_user_id") @db.Uuid
+  removalReason    String?               @map("removal_reason")
+  createdAt        DateTime              @default(now()) @map("created_at")
+
+  @@unique([companyId, id])
+  @@unique([companyId, storedFileId])
+  @@map("driver_licence_files")
+}
+
+model DocumentReviewHistory {
+  id               String                @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId        String                @map("company_id") @db.Uuid
+  documentId       String                @map("document_id") @db.Uuid
+  fromStatus       DocumentReviewStatus? @map("from_status")
+  toStatus         DocumentReviewStatus  @map("to_status")
+  reviewedByUserId String                @map("reviewed_by_user_id") @db.Uuid
+  reason           String?
+  createdAt        DateTime              @default(now()) @map("created_at")
+
+  @@unique([companyId, id])
+  @@index([companyId, documentId, createdAt])
+  @@map("document_review_history")
+}
+
 model DriverVehicleCapability {
-  id                String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  companyId         String   @map("company_id") @db.Uuid
-  driverId          String   @map("driver_id") @db.Uuid
-  vehicleCategoryId String   @map("vehicle_category_id") @db.Uuid
-  authorizedAt      DateTime @default(now()) @map("authorized_at")
-  authorizedByUserId String? @map("authorized_by_user_id") @db.Uuid
-  expiresOn         DateTime? @db.Date @map("expires_on")
-  isActive          Boolean  @default(true) @map("is_active")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  id                 String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId          String    @map("company_id") @db.Uuid
+  driverId           String    @map("driver_id") @db.Uuid
+  vehicleCategoryId  String    @map("vehicle_category_id") @db.Uuid
+  authorizedAt       DateTime  @default(now()) @map("authorized_at")
+  authorizedByUserId String?   @map("authorized_by_user_id") @db.Uuid
+  expiresOn          DateTime? @map("expires_on") @db.Date
+  isActive           Boolean   @default(true) @map("is_active")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
   @@unique([companyId, driverId, vehicleCategoryId])
   @@unique([companyId, id])
   @@index([companyId, driverId, isActive])
@@ -248,18 +506,19 @@ model DriverVehicleCapability {
 }
 
 model Vehicle {
-  id                   String                   @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  companyId            String                   @map("company_id") @db.Uuid
-  registrationDisplay  String                   @map("registration_display")
-  registrationNormalized String                 @map("registration_normalized")
-  vehicleCategoryId    String                   @map("vehicle_category_id") @db.Uuid
-  depotLocationId      String?                  @map("depot_location_id") @db.Uuid
-  operationalStatus    VehicleOperationalStatus @default(ACTIVE) @map("operational_status")
-  registrationExpiresOn DateTime?               @db.Date @map("registration_expires_on")
-  nextServiceOdometerKm Int?                    @map("next_service_odometer_km")
-  archivedAt           DateTime?                @map("archived_at")
-  createdAt            DateTime                 @default(now()) @map("created_at")
-  updatedAt            DateTime                 @updatedAt @map("updated_at")
+  id                     String                   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId              String                   @map("company_id") @db.Uuid
+  registrationDisplay    String                   @map("registration_display")
+  registrationNormalized String                   @map("registration_normalized")
+  vehicleCategoryId      String                   @map("vehicle_category_id") @db.Uuid
+  depotLocationId        String?                  @map("depot_location_id") @db.Uuid
+  operationalStatus      VehicleOperationalStatus @default(ACTIVE) @map("operational_status")
+  registrationExpiresOn  DateTime?                @map("registration_expires_on") @db.Date
+  nextServiceOdometerKm  Int?                     @map("next_service_odometer_km")
+  archivedAt             DateTime?                @map("archived_at")
+  createdAt              DateTime                 @default(now()) @map("created_at")
+  updatedAt              DateTime                 @updatedAt @map("updated_at")
+
   @@unique([companyId, registrationNormalized])
   @@unique([companyId, id])
   @@index([companyId, operationalStatus])
@@ -277,30 +536,32 @@ model VehicleStatusHistory {
   source      VehicleStatusTransitionSource @default(MANUAL)
   actorUserId String                        @map("actor_user_id") @db.Uuid
   occurredAt  DateTime                      @default(now()) @map("occurred_at")
+
   @@unique([companyId, id])
   @@index([companyId, vehicleId, occurredAt])
   @@map("vehicle_status_history")
 }
 
 model VehicleOdometerReading {
-  id                           String                @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  companyId                    String                @map("company_id") @db.Uuid
-  vehicleId                    String                @map("vehicle_id") @db.Uuid
-  readingKm                    Int                   @map("reading_km")
-  source                       OdometerReadingSource
-  status                       OdometerReadingStatus
-  reportedAt                   DateTime              @map("reported_at")
-  submittedAt                  DateTime              @default(now()) @map("submitted_at")
-  acceptedAt                   DateTime?             @map("accepted_at")
-  actorUserId                  String                @map("actor_user_id") @db.Uuid
-  reviewedByUserId             String?               @map("reviewed_by_user_id") @db.Uuid
-  reviewedAt                   DateTime?             @map("reviewed_at")
-  reviewNote                   String?               @map("review_note")
-  previousAcceptedReadingId    String?               @map("previous_accepted_reading_id") @db.Uuid
-  previousAcceptedOdometerKm  Int?                   @map("previous_accepted_odometer_km")
-  thresholdKmSnapshot          Int?                  @map("threshold_km_snapshot")
-  differenceKm                 Int?                  @map("difference_km")
-  sourceInspectionId           String?               @map("source_inspection_id") @db.Uuid
+  id                         String                @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId                  String                @map("company_id") @db.Uuid
+  vehicleId                  String                @map("vehicle_id") @db.Uuid
+  readingKm                  Int                   @map("reading_km")
+  source                     OdometerReadingSource
+  status                     OdometerReadingStatus
+  reportedAt                 DateTime              @map("reported_at")
+  submittedAt                DateTime              @default(now()) @map("submitted_at")
+  acceptedAt                 DateTime?             @map("accepted_at")
+  actorUserId                String                @map("actor_user_id") @db.Uuid
+  reviewedByUserId           String?               @map("reviewed_by_user_id") @db.Uuid
+  reviewedAt                 DateTime?             @map("reviewed_at")
+  reviewNote                 String?               @map("review_note")
+  previousAcceptedReadingId  String?               @map("previous_accepted_reading_id") @db.Uuid
+  previousAcceptedOdometerKm Int?                  @map("previous_accepted_odometer_km")
+  thresholdKmSnapshot        Int?                  @map("threshold_km_snapshot")
+  differenceKm               Int?                  @map("difference_km")
+  sourceInspectionId         String?               @map("source_inspection_id") @db.Uuid
+
   @@unique([companyId, id])
   @@unique([companyId, vehicleId, id])
   @@index([companyId, vehicleId, acceptedAt])

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { defaultVehicleCategories, normalizeRegistration } from "@/modules/vehicles/registration";
+import {
+  defaultVehicleCategories,
+  defaultVehicleCategoryRequiredLicenceClass,
+  normalizeRegistration,
+} from "@/modules/vehicles/registration";
 
 describe("vehicle registration normalization", () => {
   it("normalizes approved separators while retaining an upper-case display value", () => {
@@ -15,5 +19,16 @@ describe("vehicle registration normalization", () => {
 
   it("uses only the approved default vehicle categories", () => {
     expect(defaultVehicleCategories).toEqual(["VAN", "LR", "MR", "HR", "HC", "MC"]);
+  });
+
+  it("maps only the approved built-in categories to known licence classes", () => {
+    expect(defaultVehicleCategoryRequiredLicenceClass).toEqual({
+      VAN: "C",
+      LR: "LR",
+      MR: "MR",
+      HR: "HR",
+      HC: "HC",
+      MC: "MC",
+    });
   });
 });

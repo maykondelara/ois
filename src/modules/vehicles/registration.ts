@@ -13,3 +13,13 @@ export function normalizeRegistration(input: string) {
 }
 
 export const defaultVehicleCategories = ["VAN", "LR", "MR", "HR", "HC", "MC"] as const;
+
+/** Approved legal-class defaults for the built-in category codes; custom codes stay unknown. */
+export const defaultVehicleCategoryRequiredLicenceClass = {
+  VAN: "C",
+  LR: "LR",
+  MR: "MR",
+  HR: "HR",
+  HC: "HC",
+  MC: "MC",
+} as const;

@@ -1,7 +1,10 @@
 import type { PrismaClient } from "@prisma/client";
 import { hashPassword } from "@/modules/identity/password.service";
 import { permissionCodes, roleCodes, rolePermissionMatrix } from "@/modules/identity/permissions";
-import { defaultVehicleCategories } from "@/modules/vehicles/registration";
+import {
+  defaultVehicleCategories,
+  defaultVehicleCategoryRequiredLicenceClass,
+} from "@/modules/vehicles/registration";
 
 type SeedClient = Pick<
   PrismaClient,
@@ -75,8 +78,17 @@ export async function seedFoundation(
   for (const code of defaultVehicleCategories) {
     await client.vehicleCategory.upsert({
       where: { companyId_code: { companyId: company.id, code } },
-      update: { name: code, isActive: true },
-      create: { companyId: company.id, code, name: code },
+      update: {
+        name: code,
+        isActive: true,
+        requiredLicenceClass: defaultVehicleCategoryRequiredLicenceClass[code],
+      },
+      create: {
+        companyId: company.id,
+        code,
+        name: code,
+        requiredLicenceClass: defaultVehicleCategoryRequiredLicenceClass[code],
+      },
     });
   }
 }

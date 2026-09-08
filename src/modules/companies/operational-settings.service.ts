@@ -3,7 +3,10 @@ import { withTenantTransaction } from "@/db/tenant-transaction";
 import { recordTenantActivity } from "@/modules/activities/audit.service";
 import { requirePermission } from "@/modules/identity/authorization";
 import type { TenantContext } from "@/modules/identity/tenant-context";
-import { defaultVehicleCategories } from "@/modules/vehicles/registration";
+import {
+  defaultVehicleCategories,
+  defaultVehicleCategoryRequiredLicenceClass,
+} from "@/modules/vehicles/registration";
 import { z } from "zod";
 
 type TenantClient = Pick<PrismaClient, "$transaction">;
@@ -32,7 +35,12 @@ export async function initializeOperationalDefaults(client: TenantClient, contex
         transaction.vehicleCategory.upsert({
           where: { companyId_code: { companyId: context.companyId, code } },
           update: {},
-          create: { companyId: context.companyId, code, name: code },
+          create: {
+            companyId: context.companyId,
+            code,
+            name: code,
+            requiredLicenceClass: defaultVehicleCategoryRequiredLicenceClass[code],
+          },
         }),
       ),
     );

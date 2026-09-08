@@ -12,5 +12,14 @@ GRANT SELECT, INSERT, UPDATE ON driver_vehicle_capabilities TO :"runtime_role";
 GRANT SELECT, INSERT, UPDATE ON vehicles TO :"runtime_role";
 GRANT SELECT, INSERT ON vehicle_status_history TO :"runtime_role";
 GRANT SELECT, INSERT, UPDATE ON vehicle_odometer_readings TO :"runtime_role";
+GRANT SELECT, INSERT, UPDATE ON document_types TO :"runtime_role";
+GRANT SELECT, INSERT, UPDATE ON compliance_requirements TO :"runtime_role";
+GRANT SELECT, INSERT, UPDATE ON compliance_requirement_assignments TO :"runtime_role";
+GRANT SELECT, INSERT, UPDATE ON compliance_requirement_exemptions TO :"runtime_role";
+GRANT SELECT, INSERT, UPDATE ON documents TO :"runtime_role";
+GRANT SELECT, INSERT, UPDATE ON stored_files TO :"runtime_role";
+GRANT SELECT, INSERT, UPDATE ON document_files TO :"runtime_role";
+GRANT SELECT, INSERT, UPDATE ON driver_licence_files TO :"runtime_role";
+GRANT SELECT, INSERT ON document_review_history TO :"runtime_role";
 
 REVOKE CREATE ON SCHEMA public FROM :"runtime_role";
