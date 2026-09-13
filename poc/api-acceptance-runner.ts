@@ -6,8 +6,8 @@ import { startApiAcceptanceServer } from "./api-acceptance-server";
 import { createPhase3a3CheckpointLedger } from "./phase3a3-api-acceptance-checkpoints";
 
 type JsonRecord = Record<string, unknown>;
-type CookieJar = Map<string, string>;
-type ApiResponse = Readonly<{
+export type CookieJar = Map<string, string>;
+export type ApiResponse = Readonly<{
   status: number;
   body: unknown;
   requestId: string | null;
@@ -60,7 +60,7 @@ function error(response: ApiResponse): JsonRecord {
   return record(record(response.body).error);
 }
 
-function newJar(): CookieJar {
+export function newJar(): CookieJar {
   return new Map();
 }
 
@@ -102,7 +102,7 @@ type RequestOptions = Readonly<{
   requestId?: string;
 }>;
 
-async function apiRequest(
+export async function apiRequest(
   baseUrl: string,
   jar: CookieJar,
   path: string,
@@ -147,7 +147,11 @@ function assertError(response: ApiResponse, status: number, code: string) {
   assert(response.requestId === payload.requestId, "Error request ID header and body must agree");
 }
 
-async function signIn(baseUrl: string, email: string, password: string): Promise<CookieJar | null> {
+export async function signIn(
+  baseUrl: string,
+  email: string,
+  password: string,
+): Promise<CookieJar | null> {
   const jar = newJar();
   const csrf = await parseResponse(
     await fetch(`${baseUrl}/api/auth/csrf`, { redirect: "manual" }),

@@ -90,7 +90,7 @@ describe("Phase 3B.2 compliance domain", () => {
         new Date("2026-01-02"),
         30,
       ),
-    ).toEqual({ status: "EXPIRED", reason: null, hasPendingReview: true });
+    ).toEqual({ status: "EXPIRED", reason: null, hasPendingReview: true, daysRemaining: -2 });
   });
   it("prefers a combined licence representation without changing completeness semantics", () => {
     expect(selectDriverLicenceAttachmentRepresentation(["FRONT", "BACK"])).toBe("FRONT_BACK");

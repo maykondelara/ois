@@ -71,6 +71,20 @@ export function statusForExpiry(
   return daysRemaining <= warningDays ? "EXPIRING_SOON" : "COMPLIANT";
 }
 
+export function daysUntilExpiry(expiryDate: Date | null, evaluationDate: Date) {
+  if (!expiryDate) return null;
+  const dayMs = 86_400_000;
+  return Math.round(
+    (Date.UTC(expiryDate.getUTCFullYear(), expiryDate.getUTCMonth(), expiryDate.getUTCDate()) -
+      Date.UTC(
+        evaluationDate.getUTCFullYear(),
+        evaluationDate.getUTCMonth(),
+        evaluationDate.getUTCDate(),
+      )) /
+      dayMs,
+  );
+}
+
 export function summarizeCompliance(statuses: readonly ComplianceStatus[]): {
   status: SubjectSummaryStatus;
   percentage: number | null;

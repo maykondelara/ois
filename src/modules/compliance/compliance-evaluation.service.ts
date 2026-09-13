@@ -9,7 +9,7 @@ import {
   subjectComplianceSummary,
   type EvidenceCandidate,
 } from "@/modules/compliance/compliance-evaluation";
-import { statusForExpiry } from "@/modules/compliance/compliance-domain";
+import { daysUntilExpiry, statusForExpiry } from "@/modules/compliance/compliance-domain";
 import { selectDriverLicence } from "@/modules/drivers/driver-licence-selector";
 
 type TenantClient = Pick<PrismaClient, "$transaction">;
@@ -19,7 +19,11 @@ export type ComplianceObligation = Readonly<{
   subjectType: ComplianceSubjectType;
   subjectId: string;
   requirementId: string;
+  requirementName: string;
+  documentTypeId: string;
+  documentTypeName: string;
   status: "COMPLIANT" | "EXPIRING_SOON" | "EXPIRED" | "MISSING";
+  daysRemaining: number | null;
   reason: string | null;
   hasPendingReview: boolean;
 }>;
@@ -176,6 +180,11 @@ export async function evaluateCompanyCompliance(
 
         const documentType = documentTypes.find((item) => item.id === requirement.documentTypeId);
         if (!documentType) continue;
+        const identity = {
+          requirementName: requirement.name,
+          documentTypeId: documentType.id,
+          documentTypeName: documentType.name,
+        };
         if (documentType.evidenceSourceType === "DOCUMENT") {
           const typeDocuments = documents.filter(
             (document) =>
@@ -211,6 +220,7 @@ export async function evaluateCompanyCompliance(
             subjectType: subject.type,
             subjectId: subject.id,
             requirementId: requirement.id,
+            ...identity,
             ...evidence,
           });
         } else if (subject.type === "DRIVER") {
@@ -223,7 +233,9 @@ export async function evaluateCompanyCompliance(
               subjectType: subject.type,
               subjectId: subject.id,
               requirementId: requirement.id,
+              ...identity,
               status: "MISSING",
+              daysRemaining: null,
               reason:
                 selection.kind === "AMBIGUOUS"
                   ? "DRIVER_LICENCE_AMBIGUOUS"
@@ -244,6 +256,7 @@ export async function evaluateCompanyCompliance(
             subjectType: subject.type,
             subjectId: subject.id,
             requirementId: requirement.id,
+            ...identity,
             status: representation
               ? statusForExpiry(
                   selection.licence.expiresOn,
@@ -251,6 +264,9 @@ export async function evaluateCompanyCompliance(
                   requirement.expiryWarningDays,
                 )
               : "MISSING",
+            daysRemaining: representation
+              ? daysUntilExpiry(selection.licence.expiresOn, evaluationDate)
+              : null,
             reason: representation ? null : "LICENCE_EVIDENCE_INCOMPLETE",
             hasPendingReview: false,
           });

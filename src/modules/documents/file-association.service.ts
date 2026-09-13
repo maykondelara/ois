@@ -72,9 +72,14 @@ export async function attachDocumentFile(
     await requireEditableDocument(transaction, context, documentId);
     const file = await transaction.storedFile.findUnique({
       where: { companyId_id: { companyId: context.companyId, id: storedFileId } },
-      select: { id: true },
+      select: { id: true, fileState: true },
     });
     if (!file) throw new TenantRecordNotFoundError("Stored file");
+    if (file.fileState !== "AVAILABLE")
+      throw new ValidationError(
+        "DOCUMENT_FILE_UNAVAILABLE",
+        "Document attachment must be available",
+      );
     const existingLicenceAttachment = await transaction.driverLicenceFile.findFirst({
       where: { companyId: context.companyId, storedFileId, removedAt: null },
       select: { id: true },

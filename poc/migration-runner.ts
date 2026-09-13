@@ -54,6 +54,7 @@ import { locationRepository } from "../src/modules/companies/location.repository
 import { seedFoundation } from "../src/modules/identity/seed.service";
 import { resolveTenantContext } from "../src/modules/identity/tenant-context.service";
 import { runPhase3a3ApiAcceptance } from "./api-acceptance-runner";
+import { runPhase3b3ApiAcceptance } from "./phase3b3-api-acceptance-runner";
 import { runPhase3b2PostgresAcceptance } from "./phase3b2-postgres-acceptance";
 
 const url = process.env.DATABASE_URL ?? "";
@@ -118,6 +119,8 @@ const membershipStage2ScopeCorrectionMigration =
   "prisma/migrations/20260906000200_company_membership_stage2_read_scope_correction/migration.sql";
 const phase3bFoundationMigration =
   "prisma/migrations/20260906000300_phase3b_documents_compliance_foundation/migration.sql";
+const phase3bExemptionEffectiveFromNullableMigration =
+  "prisma/migrations/20260909000100_phase3b_exemption_effective_from_nullable/migration.sql";
 const hardenedMembershipPolicies = [
   "memberships_select_bootstrap_or_tenant",
   "memberships_insert_self",
@@ -276,6 +279,22 @@ async function main() {
       throw error;
     }
     console.log("phase3b_migration_apply: PASS");
+  }
+  const exemptionEffectiveFrom = await admin.query(
+    "SELECT is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name='compliance_requirement_exemptions' AND column_name='effective_from'",
+  );
+  if (exemptionEffectiveFrom.rows[0]?.is_nullable === "YES") {
+    console.log(
+      "phase3b_exemption_effective_from_nullable_migration_apply: PASS (already applied)",
+    );
+  } else if (exemptionEffectiveFrom.rows[0]?.is_nullable === "NO") {
+    console.log("phase3b_exemption_effective_from_nullable_migration_apply: START");
+    await m.query(await readFile(phase3bExemptionEffectiveFromNullableMigration, "utf8"));
+    console.log("phase3b_exemption_effective_from_nullable_migration_apply: PASS");
+  } else {
+    throw new Error(
+      "phase3b_exemption_effective_from_nullable_migration_apply: FAIL expected exemption effective_from column is missing",
+    );
   }
   const membershipPolicies = await admin.query(
     "SELECT policyname FROM pg_policies WHERE schemaname='public' AND tablename='company_memberships'",
@@ -1924,6 +1943,11 @@ async function main() {
   );
   checkpoint("audit_cross_tenant_isolation", crossTenantAuditRows === 0);
   await runPhase3a3ApiAcceptance({
+    admin,
+    runtimeDatabaseUrl: runtimeUrl(),
+    checkpoint,
+  });
+  await runPhase3b3ApiAcceptance({
     admin,
     runtimeDatabaseUrl: runtimeUrl(),
     checkpoint,

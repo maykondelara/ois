@@ -1,5 +1,6 @@
 import type { ComplianceSubjectType } from "@prisma/client";
 import {
+  daysUntilExpiry,
   isDateWithinInclusiveRange,
   statusForExpiry,
   summarizeCompliance,
@@ -61,6 +62,9 @@ export function evaluateEvidence(
     status,
     reason: result.selected ? null : reasonWhenMissing,
     hasPendingReview: result.hasPendingReview,
+    daysRemaining: result.selected
+      ? daysUntilExpiry(result.selected.expiryDate, evaluationDate)
+      : null,
   };
 }
 export function isExemptionEffective(
