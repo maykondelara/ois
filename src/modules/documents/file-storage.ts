@@ -5,7 +5,7 @@ export interface FileStorageProvider {
     input: Readonly<{ bucket: string; objectKey: string; expiresInSeconds: number }>,
   ): Promise<string>;
   inspectObject(
-    input: Readonly<{ bucket: string; objectKey: string }>,
+    input: Readonly<{ bucket: string; objectKey: string; maxBytes?: number }>,
   ): Promise<{ content: Uint8Array }>;
   createDownloadUrl(
     input: Readonly<{ bucket: string; objectKey: string; expiresInSeconds: number }>,
@@ -13,5 +13,5 @@ export interface FileStorageProvider {
 }
 
 export function opaqueObjectKey(companyId: string, storedFileId: string) {
-  return `companies/${companyId}/stored-files/${storedFileId}`;
+  return `companies/${companyId}/stored-files/${storedFileId}/${crypto.randomUUID()}`;
 }

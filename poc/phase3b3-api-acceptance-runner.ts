@@ -33,7 +33,13 @@ function assertError(response: ApiResponse, status: number, code: string) {
   assert(typeof error.requestId === "string" && error.requestId.length > 0, "Missing request ID");
 }
 
-async function fixtures(admin: Client) {
+export async function createPhase3b3Fixtures(
+  admin: Client,
+  fixturePrefix = `phase3b3-${randomBytes(8).toString("hex")}`,
+) {
+  // Each acceptance stage receives distinct rows even when this helper is reused
+  // by a later stage in the same migration-runner process.
+  const prefix = fixturePrefix;
   const password = randomBytes(24).toString("base64url");
   const hash = await hashPassword(password);
   const users = await admin.query(
@@ -77,7 +83,7 @@ async function fixtures(admin: Client) {
 export async function runPhase3b3ApiAcceptance(input: ApiAcceptanceInput) {
   const ledger = createPhase3b3CheckpointLedger(input.checkpoint);
   const checkpoint = ledger.checkpoint;
-  const fixture = await fixtures(input.admin);
+  const fixture = await createPhase3b3Fixtures(input.admin, prefix);
   const server = await startApiAcceptanceServer({
     databaseUrl: input.runtimeDatabaseUrl,
     port: 3_101,

@@ -55,6 +55,7 @@ import { seedFoundation } from "../src/modules/identity/seed.service";
 import { resolveTenantContext } from "../src/modules/identity/tenant-context.service";
 import { runPhase3a3ApiAcceptance } from "./api-acceptance-runner";
 import { runPhase3b3ApiAcceptance } from "./phase3b3-api-acceptance-runner";
+import { runPhase3b4ApiAcceptance } from "./phase3b4-api-acceptance-runner";
 import { runPhase3b2PostgresAcceptance } from "./phase3b2-postgres-acceptance";
 
 const url = process.env.DATABASE_URL ?? "";
@@ -1952,6 +1953,7 @@ async function main() {
     runtimeDatabaseUrl: runtimeUrl(),
     checkpoint,
   });
+  await runPhase3b4ApiAcceptance({ admin, runtimeDatabaseUrl: runtimeUrl(), checkpoint });
   const passwordPrisma = new PrismaClient({ datasources: { db: { url: runtimeUrl() } } });
   const issued = await issuePasswordReset(passwordPrisma, "a@validation.test");
   const storedToken = await admin.query(

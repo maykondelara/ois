@@ -12,6 +12,7 @@ export type ApiAcceptanceServer = Readonly<{
 export type StartApiAcceptanceServerInput = Readonly<{
   databaseUrl: string;
   port?: number;
+  fileStorageAcceptanceFake?: boolean;
 }>;
 
 function randomServerSecret() {
@@ -59,6 +60,9 @@ export async function startApiAcceptanceServer(
   const child = spawn(
     process.execPath,
     [
+      ...(input.fileStorageAcceptanceFake
+        ? ["--import", "./poc/file-storage-acceptance-preload.ts"]
+        : []),
       "./node_modules/next/dist/bin/next",
       "start",
       "--hostname",
@@ -79,6 +83,7 @@ export async function startApiAcceptanceServer(
         OIS_LICENCE_ENCRYPTION_KEY: randomServerSecret(),
         OIS_LICENCE_ENCRYPTION_KEY_VERSION: "acceptance-v1",
         OIS_ODOMETER_CONFIRMATION_KEY: randomServerSecret(),
+        ...(input.fileStorageAcceptanceFake ? { OIS_FILE_STORAGE_ACCEPTANCE_FAKE: "true" } : {}),
       },
       stdio: "pipe",
     },

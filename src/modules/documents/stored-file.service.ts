@@ -22,6 +22,7 @@ export async function initiateStoredFile(
   provider: FileStorageProvider,
   bucket: string,
   originalFilename: string,
+  uploadUrlTtlSeconds = 900,
 ) {
   requireStoredFileMutationPermission(context);
   return withTenantTransaction(client, context, async (tx) => {
@@ -40,7 +41,11 @@ export async function initiateStoredFile(
       where: { companyId_id: { companyId: context.companyId, id: file.id } },
       data: { objectKey },
     });
-    const uploadUrl = await provider.createUploadUrl({ bucket, objectKey, expiresInSeconds: 600 });
+    const uploadUrl = await provider.createUploadUrl({
+      bucket,
+      objectKey,
+      expiresInSeconds: uploadUrlTtlSeconds,
+    });
     await recordTenantActivity(tx, context, {
       action: "stored_file.initiated",
       entityType: "stored_file",
@@ -65,7 +70,11 @@ export async function finalizeStoredFile(
       throw new TenantRecordNotFoundError("Stored file");
     if (file.fileState !== "PENDING")
       throw new ConflictError("STORED_FILE_NOT_PENDING", "Stored file is not pending");
-    const object = await provider.inspectObject({ bucket: file.bucket, objectKey: file.objectKey });
+    const object = await provider.inspectObject({
+      bucket: file.bucket,
+      objectKey: file.objectKey,
+      maxBytes: maxBytes,
+    });
     const mimeType = detectSupportedFileType(object.content);
     const oversized = object.content.byteLength > maxBytes;
     if (!mimeType || oversized) {
@@ -127,6 +136,7 @@ export async function createStoredFileDownload(
   context: TenantContext,
   provider: FileStorageProvider,
   fileId: string,
+  downloadUrlTtlSeconds = 300,
 ) {
   requirePermission(context, "documents.file.read");
   return withTenantTransaction(client, context, async (tx) => {
@@ -180,7 +190,7 @@ export async function createStoredFileDownload(
       url: await provider.createDownloadUrl({
         bucket: file.bucket,
         objectKey: file.objectKey,
-        expiresInSeconds: 300,
+        expiresInSeconds: downloadUrlTtlSeconds,
       }),
     };
   });
