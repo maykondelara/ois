@@ -44,6 +44,54 @@ enum InspectionVehicleSelectionStrategy {
   BOTH
 }
 
+enum InspectionTemplateVersionStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum InspectionResponseType {
+  YES_NO
+  PASS_FAIL
+  TEXT
+  NUMBER
+  ODOMETER
+  PHOTO
+  SINGLE_CHOICE
+  MULTI_CHOICE
+  CHECKBOX
+  SIGNATURE
+}
+
+enum InspectionCommentRule {
+  NEVER
+  OPTIONAL
+  REQUIRED_ON_TRIGGER
+}
+
+enum InspectionPhotoRequirement {
+  NEVER
+  ALWAYS
+  ON_FAILURE
+}
+
+enum InspectionApplicabilityMode {
+  ALL_ELIGIBLE
+  VEHICLE_CATEGORIES
+  SPECIFIC_VEHICLES
+}
+
+enum InspectionSubmissionStatus {
+  DRAFT
+  SUBMITTED
+  CANCELLED
+}
+
+enum InspectionResponseOutcome {
+  PASS
+  FAIL
+  NEUTRAL
+}
+
 enum ComplianceSubjectType {
   DRIVER
   VEHICLE
@@ -568,4 +616,207 @@ model VehicleOdometerReading {
   @@index([companyId, vehicleId, acceptedAt])
   @@index([companyId, vehicleId, status])
   @@map("vehicle_odometer_readings")
+}
+
+model InspectionTemplate {
+  id                        String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId                 String   @map("company_id") @db.Uuid
+  code                      String
+  name                      String
+  description               String?
+  isActive                  Boolean  @default(true) @map("is_active")
+  currentPublishedVersionId String?  @map("current_published_version_id") @db.Uuid
+  createdAt                 DateTime @default(now()) @map("created_at")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
+
+  @@unique([companyId, id])
+  @@unique([companyId, code])
+  @@map("inspection_templates")
+}
+
+model InspectionTemplateVersion {
+  id                String                          @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId         String                          @map("company_id") @db.Uuid
+  templateId        String                          @map("template_id") @db.Uuid
+  version           Int
+  status            InspectionTemplateVersionStatus @default(DRAFT)
+  applicabilityMode InspectionApplicabilityMode     @default(ALL_ELIGIBLE) @map("applicability_mode")
+  createdByUserId   String                          @map("created_by_user_id") @db.Uuid
+  publishedAt       DateTime?                       @map("published_at")
+  publishedByUserId String?                         @map("published_by_user_id") @db.Uuid
+  createdAt         DateTime                        @default(now()) @map("created_at")
+  updatedAt         DateTime                        @updatedAt @map("updated_at")
+
+  @@unique([companyId, id])
+  @@unique([companyId, templateId, id])
+  @@unique([companyId, templateId, version])
+  @@map("inspection_template_versions")
+}
+
+model InspectionSection {
+  id                String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId         String   @map("company_id") @db.Uuid
+  templateVersionId String   @map("template_version_id") @db.Uuid
+  title             String
+  description       String?
+  sortOrder         Int      @map("sort_order")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@unique([companyId, id])
+  @@unique([companyId, templateVersionId, id])
+  @@unique([companyId, templateVersionId, sortOrder])
+  @@map("inspection_sections")
+}
+
+model InspectionQuestion {
+  id                  String                     @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId           String                     @map("company_id") @db.Uuid
+  templateVersionId   String                     @map("template_version_id") @db.Uuid
+  sectionId           String                     @map("section_id") @db.Uuid
+  label               String
+  helpText            String?                    @map("help_text")
+  isRequired          Boolean                    @default(false) @map("is_required")
+  responseType        InspectionResponseType     @map("response_type")
+  sortOrder           Int                        @map("sort_order")
+  failureBooleanValue Boolean?                   @map("failure_boolean_value")
+  minimumValue        Decimal?                   @map("minimum_value") @db.Decimal(14, 2)
+  maximumValue        Decimal?                   @map("maximum_value") @db.Decimal(14, 2)
+  commentRule         InspectionCommentRule      @default(OPTIONAL) @map("comment_rule")
+  photoRequirement    InspectionPhotoRequirement @default(NEVER) @map("photo_requirement")
+  createdAt           DateTime                   @default(now()) @map("created_at")
+  updatedAt           DateTime                   @updatedAt @map("updated_at")
+
+  @@unique([companyId, id])
+  @@unique([companyId, templateVersionId, id])
+  @@unique([companyId, templateVersionId, sectionId, id], map: "inspection_questions_company_version_section_id_key")
+  @@unique([companyId, templateVersionId, sectionId, sortOrder], map: "inspection_questions_company_version_section_order_key")
+  @@map("inspection_questions")
+}
+
+model InspectionQuestionOption {
+  id                String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId         String   @map("company_id") @db.Uuid
+  templateVersionId String   @map("template_version_id") @db.Uuid
+  questionId        String   @map("question_id") @db.Uuid
+  label             String
+  sortOrder         Int      @map("sort_order")
+  isFailure         Boolean  @default(false) @map("is_failure")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@unique([companyId, id])
+  @@unique([companyId, templateVersionId, questionId, id])
+  @@unique([companyId, questionId, sortOrder])
+  @@map("inspection_question_options")
+}
+
+model InspectionTemplateCategoryApplicability {
+  id                String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId         String   @map("company_id") @db.Uuid
+  templateVersionId String   @map("template_version_id") @db.Uuid
+  vehicleCategoryId String   @map("vehicle_category_id") @db.Uuid
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@unique([companyId, id])
+  @@unique([companyId, templateVersionId, vehicleCategoryId])
+  @@map("inspection_template_category_applicabilities")
+}
+
+model InspectionTemplateVehicleApplicability {
+  id                String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId         String   @map("company_id") @db.Uuid
+  templateVersionId String   @map("template_version_id") @db.Uuid
+  vehicleId         String   @map("vehicle_id") @db.Uuid
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@unique([companyId, id])
+  @@unique([companyId, templateVersionId, vehicleId])
+  @@map("inspection_template_vehicle_applicabilities")
+}
+
+model InspectionSubmission {
+  id                          String                     @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId                   String                     @map("company_id") @db.Uuid
+  templateId                  String                     @map("template_id") @db.Uuid
+  templateVersionId           String                     @map("template_version_id") @db.Uuid
+  vehicleId                   String                     @map("vehicle_id") @db.Uuid
+  driverId                    String?                    @map("driver_id") @db.Uuid
+  status                      InspectionSubmissionStatus @default(DRAFT)
+  outcome                     InspectionResponseOutcome?
+  vehicleRegistrationSnapshot String?                    @map("vehicle_registration_snapshot")
+  templateNameSnapshot        String?                    @map("template_name_snapshot")
+  driverDisplayNameSnapshot   String?                    @map("driver_display_name_snapshot")
+  startedByUserId             String                     @map("started_by_user_id") @db.Uuid
+  startedAt                   DateTime                   @default(now()) @map("started_at")
+  submittedAt                 DateTime?                  @map("submitted_at")
+  cancelledAt                 DateTime?                  @map("cancelled_at")
+  cancelledByUserId           String?                    @map("cancelled_by_user_id") @db.Uuid
+  cancellationReason          String?                    @map("cancellation_reason")
+  createdAt                   DateTime                   @default(now()) @map("created_at")
+  updatedAt                   DateTime                   @updatedAt @map("updated_at")
+
+  @@unique([companyId, id])
+  @@unique([companyId, id, templateVersionId])
+  @@index([companyId, vehicleId, status])
+  @@index([companyId, templateVersionId, status])
+  @@map("inspection_submissions")
+}
+
+model InspectionResponse {
+  id                String                    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId         String                    @map("company_id") @db.Uuid
+  submissionId      String                    @map("submission_id") @db.Uuid
+  templateVersionId String                    @map("template_version_id") @db.Uuid
+  questionId        String                    @map("question_id") @db.Uuid
+  booleanValue      Boolean?                  @map("boolean_value")
+  textValue         String?                   @map("text_value")
+  numberValue       Decimal?                  @map("number_value") @db.Decimal(14, 2)
+  odometerValueKm   Int?                      @map("odometer_value_km")
+  comment           String?
+  outcome           InspectionResponseOutcome @default(NEUTRAL)
+  createdAt         DateTime                  @default(now()) @map("created_at")
+  updatedAt         DateTime                  @updatedAt @map("updated_at")
+
+  @@unique([companyId, id])
+  @@unique([companyId, submissionId, questionId])
+  @@unique([companyId, id, templateVersionId, questionId])
+  @@map("inspection_responses")
+}
+
+model InspectionResponseOption {
+  id                String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId         String   @map("company_id") @db.Uuid
+  responseId        String   @map("response_id") @db.Uuid
+  templateVersionId String   @map("template_version_id") @db.Uuid
+  questionId        String   @map("question_id") @db.Uuid
+  questionOptionId  String   @map("question_option_id") @db.Uuid
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@unique([companyId, id])
+  @@unique([companyId, responseId, questionOptionId])
+  @@map("inspection_response_options")
+}
+
+model InspectionResponseFile {
+  id               String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  companyId        String    @map("company_id") @db.Uuid
+  responseId       String    @map("response_id") @db.Uuid
+  storedFileId     String    @map("stored_file_id") @db.Uuid
+  attachedAt       DateTime  @default(now()) @map("attached_at")
+  attachedByUserId String    @map("attached_by_user_id") @db.Uuid
+  removedAt        DateTime? @map("removed_at")
+  removedByUserId  String?   @map("removed_by_user_id") @db.Uuid
+  removalReason    String?   @map("removal_reason")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  @@unique([companyId, id])
+  @@unique([companyId, storedFileId])
+  @@index([companyId, responseId])
+  @@map("inspection_response_files")
 }

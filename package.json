@@ -22,6 +22,8 @@
     "test": "vitest run",
     "test:phase3b2:postgres": "node --import tsx poc/phase3b2-postgres-acceptance.ts",
     "test:phase3b2:postgres:smoke": "OIS_PHASE3B2_POSTGRES_IMPORT_SMOKE=true node --import tsx poc/phase3b2-postgres-acceptance.ts",
+    "test:phase3c1:postgres": "node --import tsx poc/phase3c1-postgres-acceptance.ts",
+    "test:phase3c1:postgres:smoke": "OIS_PHASE3C1_POSTGRES_IMPORT_SMOKE=true node --import tsx poc/phase3c1-postgres-acceptance.ts",
     "test:phase3b4:r2:smoke": "node --import tsx poc/r2-real-smoke.ts",
     "test:watch": "vitest",
     "test:e2e": "playwright test",

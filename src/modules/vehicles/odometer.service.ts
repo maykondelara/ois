@@ -138,65 +138,48 @@ export type OdometerSubmissionResult =
       differenceKm: number;
     }>;
 
-export async function submitManualOdometerReading(
-  client: TenantClient,
+async function submitOdometerReadingInTenantTransaction(
+  transaction: TenantTransaction,
   context: TenantContext,
   confirmations: OdometerConfirmationTokenService,
   vehicleId: string,
-  rawInput: unknown,
+  input: ReturnType<typeof odometerSubmissionSchema.parse>,
+  source: "MANUAL_ENTRY" | "INSPECTION",
+  sourceInspectionId?: string,
 ): Promise<OdometerSubmissionResult> {
-  requirePermission(context, "vehicles.odometer.submit");
-  const input = odometerSubmissionSchema.parse(rawInput);
-  return withTenantTransaction(client, context, async (transaction) => {
-    await lockVehicle(transaction, context, vehicleId);
-    if (await pendingReview(transaction, context, vehicleId))
-      throw new ConflictError(
-        "UNRESOLVED_ODOMETER_REVIEW",
-        "Resolve the pending odometer review first",
-      );
-    const latest = await latestAccepted(transaction, context, vehicleId);
-    const thresholdKm = await thresholdFor(transaction, context);
-    const decision = decideOdometerSubmission({
-      proposedKm: input.readingKm,
-      thresholdKm,
-      latestAccepted: acceptedSnapshot(latest),
-      hasPendingReview: false,
-    });
-    if (decision.kind === "NO_BASELINE")
-      throw new ValidationError(
-        "ODOMETER_BASELINE_REQUIRED",
-        "Vehicle requires an initial odometer baseline",
-      );
-    if (decision.kind === "REGRESSION")
-      throw new ValidationError(
-        "ODOMETER_REGRESSION",
-        "Odometer reading is below the authoritative value",
-      );
-    if (decision.kind === "PENDING_REVIEW")
-      throw new ConflictError(
-        "UNRESOLVED_ODOMETER_REVIEW",
-        "Resolve the pending odometer review first",
-      );
-    if (decision.kind === "CONFIRMATION_REQUIRED" && !input.confirmationToken) {
-      return {
-        kind: "ANOMALY_CONFIRMATION_REQUIRED",
-        confirmationToken: confirmations.issue({
-          actorUserId: context.actorUserId,
-          companyId: context.companyId,
-          vehicleId,
-          proposedKm: input.readingKm,
-          acceptedReadingId: decision.previous.id,
-          acceptedOdometerKm: decision.previous.readingKm,
-          thresholdKm,
-        }),
-        previousReadingId: decision.previous.id,
-        previousOdometerKm: decision.previous.readingKm,
-        thresholdKm,
-        differenceKm: decision.differenceKm,
-      };
-    }
-    if (decision.kind === "CONFIRMATION_REQUIRED") {
-      confirmations.verify(input.confirmationToken!, {
+  await lockVehicle(transaction, context, vehicleId);
+  if (await pendingReview(transaction, context, vehicleId))
+    throw new ConflictError(
+      "UNRESOLVED_ODOMETER_REVIEW",
+      "Resolve the pending odometer review first",
+    );
+  const latest = await latestAccepted(transaction, context, vehicleId);
+  const thresholdKm = await thresholdFor(transaction, context);
+  const decision = decideOdometerSubmission({
+    proposedKm: input.readingKm,
+    thresholdKm,
+    latestAccepted: acceptedSnapshot(latest),
+    hasPendingReview: false,
+  });
+  if (decision.kind === "NO_BASELINE")
+    throw new ValidationError(
+      "ODOMETER_BASELINE_REQUIRED",
+      "Vehicle requires an initial odometer baseline",
+    );
+  if (decision.kind === "REGRESSION")
+    throw new ValidationError(
+      "ODOMETER_REGRESSION",
+      "Odometer reading is below the authoritative value",
+    );
+  if (decision.kind === "PENDING_REVIEW")
+    throw new ConflictError(
+      "UNRESOLVED_ODOMETER_REVIEW",
+      "Resolve the pending odometer review first",
+    );
+  if (decision.kind === "CONFIRMATION_REQUIRED" && !input.confirmationToken) {
+    return {
+      kind: "ANOMALY_CONFIRMATION_REQUIRED",
+      confirmationToken: confirmations.issue({
         actorUserId: context.actorUserId,
         companyId: context.companyId,
         vehicleId,
@@ -204,87 +187,183 @@ export async function submitManualOdometerReading(
         acceptedReadingId: decision.previous.id,
         acceptedOdometerKm: decision.previous.readingKm,
         thresholdKm,
-      });
-      const reading = await transaction.vehicleOdometerReading.create({
-        data: {
-          companyId: context.companyId,
-          vehicleId,
-          readingKm: input.readingKm,
-          source: "MANUAL_ENTRY",
-          status: "REVIEW_REQUIRED",
-          reportedAt: new Date(),
-          actorUserId: context.actorUserId,
-          previousAcceptedReadingId: decision.previous.id,
-          previousAcceptedOdometerKm: decision.previous.readingKm,
-          thresholdKmSnapshot: thresholdKm,
-          differenceKm: decision.differenceKm,
-        },
-      });
-      await recordTenantActivity(transaction, context, {
-        action: "vehicle.odometer_submitted",
-        entityType: "vehicle_odometer_reading",
-        entityId: reading.id,
-        metadata: {
-          source: reading.source,
-          readingKm: reading.readingKm,
-          thresholdKm,
-          differenceKm: decision.differenceKm,
-        },
-      });
-      await recordTenantActivity(transaction, context, {
-        action: "vehicle.odometer_review_required",
-        entityType: "vehicle_odometer_reading",
-        entityId: reading.id,
-        metadata: {
-          previousReadingId: decision.previous.id,
-          previousOdometerKm: decision.previous.readingKm,
-        },
-      });
-      return { kind: "REVIEW_REQUIRED", readingId: reading.id, readingKm: reading.readingKm };
-    }
-    try {
-      const reading = await transaction.vehicleOdometerReading.create({
-        data: {
-          companyId: context.companyId,
-          vehicleId,
-          readingKm: input.readingKm,
-          source: "MANUAL_ENTRY",
-          status: "ACCEPTED",
-          reportedAt: new Date(),
-          acceptedAt: new Date(),
-          actorUserId: context.actorUserId,
-          previousAcceptedReadingId: decision.previous.id,
-          previousAcceptedOdometerKm: decision.previous.readingKm,
-          thresholdKmSnapshot: thresholdKm,
-          differenceKm: decision.differenceKm,
-        },
-      });
-      await recordTenantActivity(transaction, context, {
-        action: "vehicle.odometer_submitted",
-        entityType: "vehicle_odometer_reading",
-        entityId: reading.id,
-        metadata: {
-          source: reading.source,
-          readingKm: reading.readingKm,
-          thresholdKm,
-          differenceKm: decision.differenceKm,
-        },
-      });
-      await recordTenantActivity(transaction, context, {
-        action: "vehicle.odometer_accepted",
-        entityType: "vehicle_odometer_reading",
-        entityId: reading.id,
-        metadata: {
-          previousReadingId: decision.previous.id,
-          previousOdometerKm: decision.previous.readingKm,
-        },
-      });
-      return { kind: "ACCEPTED", readingId: reading.id, readingKm: reading.readingKm };
-    } catch (error) {
-      mapDatabaseOdometerConflict(error);
-      throw error;
-    }
-  });
+      }),
+      previousReadingId: decision.previous.id,
+      previousOdometerKm: decision.previous.readingKm,
+      thresholdKm,
+      differenceKm: decision.differenceKm,
+    };
+  }
+  if (decision.kind === "CONFIRMATION_REQUIRED") {
+    confirmations.verify(input.confirmationToken!, {
+      actorUserId: context.actorUserId,
+      companyId: context.companyId,
+      vehicleId,
+      proposedKm: input.readingKm,
+      acceptedReadingId: decision.previous.id,
+      acceptedOdometerKm: decision.previous.readingKm,
+      thresholdKm,
+    });
+    const reading = await transaction.vehicleOdometerReading.create({
+      data: {
+        companyId: context.companyId,
+        vehicleId,
+        readingKm: input.readingKm,
+        source,
+        ...(sourceInspectionId === undefined ? {} : { sourceInspectionId }),
+        status: "REVIEW_REQUIRED",
+        reportedAt: new Date(),
+        actorUserId: context.actorUserId,
+        previousAcceptedReadingId: decision.previous.id,
+        previousAcceptedOdometerKm: decision.previous.readingKm,
+        thresholdKmSnapshot: thresholdKm,
+        differenceKm: decision.differenceKm,
+      },
+    });
+    await recordTenantActivity(transaction, context, {
+      action: "vehicle.odometer_submitted",
+      entityType: "vehicle_odometer_reading",
+      entityId: reading.id,
+      metadata: {
+        source: reading.source,
+        readingKm: reading.readingKm,
+        thresholdKm,
+        differenceKm: decision.differenceKm,
+      },
+    });
+    await recordTenantActivity(transaction, context, {
+      action: "vehicle.odometer_review_required",
+      entityType: "vehicle_odometer_reading",
+      entityId: reading.id,
+      metadata: {
+        previousReadingId: decision.previous.id,
+        previousOdometerKm: decision.previous.readingKm,
+      },
+    });
+    return { kind: "REVIEW_REQUIRED", readingId: reading.id, readingKm: reading.readingKm };
+  }
+  try {
+    const reading = await transaction.vehicleOdometerReading.create({
+      data: {
+        companyId: context.companyId,
+        vehicleId,
+        readingKm: input.readingKm,
+        source,
+        ...(sourceInspectionId === undefined ? {} : { sourceInspectionId }),
+        status: "ACCEPTED",
+        reportedAt: new Date(),
+        acceptedAt: new Date(),
+        actorUserId: context.actorUserId,
+        previousAcceptedReadingId: decision.previous.id,
+        previousAcceptedOdometerKm: decision.previous.readingKm,
+        thresholdKmSnapshot: thresholdKm,
+        differenceKm: decision.differenceKm,
+      },
+    });
+    await recordTenantActivity(transaction, context, {
+      action: "vehicle.odometer_submitted",
+      entityType: "vehicle_odometer_reading",
+      entityId: reading.id,
+      metadata: {
+        source: reading.source,
+        readingKm: reading.readingKm,
+        thresholdKm,
+        differenceKm: decision.differenceKm,
+      },
+    });
+    await recordTenantActivity(transaction, context, {
+      action: "vehicle.odometer_accepted",
+      entityType: "vehicle_odometer_reading",
+      entityId: reading.id,
+      metadata: {
+        previousReadingId: decision.previous.id,
+        previousOdometerKm: decision.previous.readingKm,
+      },
+    });
+    return { kind: "ACCEPTED", readingId: reading.id, readingKm: reading.readingKm };
+  } catch (error) {
+    mapDatabaseOdometerConflict(error);
+    throw error;
+  }
+}
+
+async function submitOdometerReading(
+  client: TenantClient,
+  context: TenantContext,
+  confirmations: OdometerConfirmationTokenService,
+  vehicleId: string,
+  rawInput: unknown,
+  source: "MANUAL_ENTRY" | "INSPECTION",
+  sourceInspectionId?: string,
+): Promise<OdometerSubmissionResult> {
+  requirePermission(context, "vehicles.odometer.submit");
+  const input = odometerSubmissionSchema.parse(rawInput);
+  return withTenantTransaction(client, context, (transaction) =>
+    submitOdometerReadingInTenantTransaction(
+      transaction,
+      context,
+      confirmations,
+      vehicleId,
+      input,
+      source,
+      sourceInspectionId,
+    ),
+  );
+}
+
+export async function submitManualOdometerReading(
+  client: TenantClient,
+  context: TenantContext,
+  confirmations: OdometerConfirmationTokenService,
+  vehicleId: string,
+  rawInput: unknown,
+): Promise<OdometerSubmissionResult> {
+  return submitOdometerReading(client, context, confirmations, vehicleId, rawInput, "MANUAL_ENTRY");
+}
+
+/** Inspection callers retain the accepted odometer decision/locking engine. */
+export async function submitInspectionOdometerReading(
+  client: TenantClient,
+  context: TenantContext,
+  confirmations: OdometerConfirmationTokenService,
+  vehicleId: string,
+  inspectionId: string,
+  rawInput: unknown,
+): Promise<OdometerSubmissionResult> {
+  return submitOdometerReading(
+    client,
+    context,
+    confirmations,
+    vehicleId,
+    rawInput,
+    "INSPECTION",
+    inspectionId,
+  );
+}
+
+/**
+ * Keeps inspection submission and its authoritative odometer mutation in one
+ * tenant transaction. The public inspection service has already authorized
+ * both inspection submission and odometer submission before invoking this.
+ */
+export async function submitInspectionOdometerReadingInTenantTransaction(
+  transaction: TenantTransaction,
+  context: TenantContext,
+  confirmations: OdometerConfirmationTokenService,
+  vehicleId: string,
+  inspectionId: string,
+  rawInput: unknown,
+): Promise<OdometerSubmissionResult> {
+  requirePermission(context, "vehicles.odometer.submit");
+  return submitOdometerReadingInTenantTransaction(
+    transaction,
+    context,
+    confirmations,
+    vehicleId,
+    odometerSubmissionSchema.parse(rawInput),
+    "INSPECTION",
+    inspectionId,
+  );
 }
 
 export async function reviewOdometerReading(
