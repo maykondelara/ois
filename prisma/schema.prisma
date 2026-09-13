@@ -302,9 +302,10 @@ model DriverLicence {
   createdAt               DateTime            @default(now()) @map("created_at")
   updatedAt               DateTime            @updatedAt @map("updated_at")
 
-  @@unique([companyId, licenceNumberLookupHash])
+  // The SQL migration owns the cross-driver exclusion constraint because Prisma 6.19 cannot model it.
   @@unique([companyId, id])
   @@unique([companyId, driverId, id])
+  @@index([companyId, licenceNumberLookupHash], map: "driver_licences_company_lookup_hash_idx")
   @@index([companyId, driverId, expiresOn])
   @@map("driver_licences")
 }
@@ -375,7 +376,7 @@ model ComplianceRequirementExemption {
   vehicleId        String?               @map("vehicle_id") @db.Uuid
   companySubjectId String?               @map("company_subject_id") @db.Uuid
   reason           String
-  effectiveFrom    DateTime              @map("effective_from") @db.Date
+  effectiveFrom    DateTime?             @map("effective_from") @db.Date
   expiresOn        DateTime?             @map("expires_on") @db.Date
   grantedAt        DateTime              @default(now()) @map("granted_at")
   grantedByUserId  String                @map("granted_by_user_id") @db.Uuid

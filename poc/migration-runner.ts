@@ -54,6 +54,7 @@ import { locationRepository } from "../src/modules/companies/location.repository
 import { seedFoundation } from "../src/modules/identity/seed.service";
 import { resolveTenantContext } from "../src/modules/identity/tenant-context.service";
 import { runPhase3a3ApiAcceptance } from "./api-acceptance-runner";
+import { runPhase3b2PostgresAcceptance } from "./phase3b2-postgres-acceptance";
 
 const url = process.env.DATABASE_URL ?? "";
 const migrator = "ois_validation_migrator";
@@ -2002,6 +2003,10 @@ async function main() {
   console.log(
     `runtime_least_privilege: ${privilege.rows[0].can_create === false && privilege.rows[0].can_assume === false ? "PASS" : "FAIL"}`,
   );
+  // Runs against a fresh disposable database through Railway's private PostgreSQL URL.
+  // It is intentionally after the complete accepted matrix and before this runner's
+  // final PASS, so a Phase 3B.2 failure fails the validation container.
+  await runPhase3b2PostgresAcceptance();
   console.log("bootstrap_rls_matrix: PASS");
   await r.end();
   await admin.end();

@@ -18,6 +18,8 @@
     "format:check": "prettier --check 'src/**/*.{ts,tsx}' 'prisma/**/*.ts' 'poc/**/*.ts' '*.{json,ts,mts,mjs,yml,yaml,css}' '.github/**/*.yml'",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:phase3b2:postgres": "node --import tsx poc/phase3b2-postgres-acceptance.ts",
+    "test:phase3b2:postgres:smoke": "OIS_PHASE3B2_POSTGRES_IMPORT_SMOKE=true node --import tsx poc/phase3b2-postgres-acceptance.ts",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "db:generate": "prisma generate",

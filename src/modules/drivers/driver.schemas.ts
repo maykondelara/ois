@@ -50,5 +50,14 @@ export const licenceCreateSchema = z.object({
 
 export const licenceUpdateSchema = licenceCreateSchema.partial();
 
+export const licenceRenewalSchema = licenceCreateSchema.extend({
+  licenceClass: z.enum(["C", "LR", "MR", "HR", "HC", "MC"]),
+  validFrom: z.coerce.date(),
+});
+
+export const licenceRevocationSchema = z.object({
+  reason: z.string().trim().min(1).max(2000),
+});
+
 export type DriverCreateInput = z.infer<typeof driverCreateSchema>;
 export type DriverUpdateInput = z.infer<typeof driverUpdateSchema>;

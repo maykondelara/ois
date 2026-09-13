@@ -5,6 +5,10 @@ import { permissionCodes, rolePermissionMatrix } from "@/modules/identity/permis
 const migrationPath =
   "prisma/migrations/20260906000300_phase3b_documents_compliance_foundation/migration.sql";
 const runtimeGrantsPath = "prisma/role-provisioning/phase3a-runtime-grants.sql";
+const exemptionCorrectionPath =
+  "prisma/migrations/20260909000100_phase3b_exemption_effective_from_nullable/migration.sql";
+const licenceNumberRenewalPath =
+  "prisma/migrations/20260910000100_driver_licence_same_driver_number_renewal/migration.sql";
 const phase3bTables = [
   "document_types",
   "compliance_requirements",
@@ -18,6 +22,24 @@ const phase3bTables = [
 ];
 
 describe("Phase 3B.1 documents and compliance foundation migration", () => {
+  it("replaces global licence-number uniqueness with same-driver exclusion semantics", async () => {
+    const sql = await readFile(licenceNumberRenewalPath, "utf8");
+    expect(sql).toContain("CREATE EXTENSION IF NOT EXISTS btree_gist");
+    expect(sql).toContain("count(DISTINCT driver_id) > 1");
+    expect(sql).toContain(
+      "DROP CONSTRAINT driver_licences_company_id_licence_number_lookup_hash_key",
+    );
+    expect(sql).toContain("EXCLUDE USING gist");
+    expect(sql).toContain("licence_number_lookup_hash WITH =");
+    expect(sql).toContain("driver_id WITH <>");
+    expect(sql).toContain("driver_licences_company_lookup_hash_idx");
+  });
+  it("uses a forward-only open-lower-bound exemption correction", async () => {
+    const sql = await readFile(exemptionCorrectionPath, "utf8");
+    expect(sql).toContain("ALTER COLUMN effective_from DROP NOT NULL");
+    expect(sql).toContain("effective_from IS NULL OR expires_on IS NULL");
+    expect(sql).not.toContain("2026-01-01");
+  });
   it("creates exactly the approved tenant tables with RLS/FORCE RLS", async () => {
     const sql = await readFile(migrationPath, "utf8");
     const createdTables = [...sql.matchAll(/^CREATE TABLE ([a-z_]+)/gm)].map((match) => match[1]);

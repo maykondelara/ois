@@ -14,9 +14,14 @@ const categoryCreateSchema = z.object({
     .toUpperCase()
     .regex(/^[A-Z][A-Z0-9_]{0,62}$/),
   name: z.string().trim().min(1).max(100),
+  requiredLicenceClass: z.enum(["C", "LR", "MR", "HR", "HC", "MC"]).nullable().optional(),
 });
 const categoryUpdateSchema = z
-  .object({ name: z.string().trim().min(1).max(100), isActive: z.boolean() })
+  .object({
+    name: z.string().trim().min(1).max(100),
+    isActive: z.boolean(),
+    requiredLicenceClass: z.enum(["C", "LR", "MR", "HR", "HC", "MC"]).nullable(),
+  })
   .partial();
 
 export async function listVehicleCategories(
@@ -43,13 +48,24 @@ export async function createVehicleCategory(
   return withTenantTransaction(client, context, async (transaction) => {
     try {
       const category = await transaction.vehicleCategory.create({
-        data: { companyId: context.companyId, ...input },
+        data: {
+          companyId: context.companyId,
+          code: input.code,
+          name: input.name,
+          ...(input.requiredLicenceClass === undefined
+            ? {}
+            : { requiredLicenceClass: input.requiredLicenceClass }),
+        },
       });
       await recordTenantActivity(transaction, context, {
         action: "vehicle_category.created",
         entityType: "vehicle_category",
         entityId: category.id,
-        metadata: { code: category.code, name: category.name },
+        metadata: {
+          code: category.code,
+          name: category.name,
+          requiredLicenceClass: category.requiredLicenceClass,
+        },
       });
       return category;
     } catch (error) {
@@ -78,13 +94,20 @@ export async function updateVehicleCategory(
       data: {
         ...(input.name === undefined ? {} : { name: input.name }),
         ...(input.isActive === undefined ? {} : { isActive: input.isActive }),
+        ...(input.requiredLicenceClass === undefined
+          ? {}
+          : { requiredLicenceClass: input.requiredLicenceClass }),
       },
     });
     await recordTenantActivity(transaction, context, {
       action: updated.isActive ? "vehicle_category.updated" : "vehicle_category.deactivated",
       entityType: "vehicle_category",
       entityId: categoryId,
-      metadata: { code: updated.code, isActive: updated.isActive },
+      metadata: {
+        code: updated.code,
+        isActive: updated.isActive,
+        requiredLicenceClass: updated.requiredLicenceClass,
+      },
     });
     return updated;
   });
