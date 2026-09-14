@@ -187,10 +187,7 @@ export async function runPhase3b2PostgresAcceptance() {
         `GRANT SELECT,UPDATE ON users TO ${quote(runtimeRole)}; GRANT SELECT ON roles,permissions,role_permissions TO ${quote(runtimeRole)}; GRANT SELECT,INSERT,UPDATE ON companies,company_memberships,locations,activities TO ${quote(runtimeRole)};`,
       );
       await targetAdmin.query(
-        (await readFile("prisma/role-provisioning/phase3a-runtime-grants.sql", "utf8")).replaceAll(
-          ':"runtime_role"',
-          quote(runtimeRole),
-        ),
+        `GRANT SELECT,INSERT,UPDATE ON company_operational_settings,vehicle_categories,drivers,driver_regular_availability,driver_licences,driver_vehicle_capabilities,vehicles,vehicle_odometer_readings,document_types,compliance_requirements,compliance_requirement_assignments,compliance_requirement_exemptions,documents,stored_files,document_files,driver_licence_files TO ${quote(runtimeRole)}; GRANT SELECT,INSERT ON vehicle_status_history,document_review_history TO ${quote(runtimeRole)}; REVOKE CREATE ON SCHEMA public FROM ${quote(runtimeRole)};`,
       );
       const nullable = await targetAdmin.query(
         "SELECT is_nullable FROM information_schema.columns WHERE table_name='compliance_requirement_exemptions' AND column_name='effective_from'",
