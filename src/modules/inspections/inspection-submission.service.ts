@@ -240,7 +240,11 @@ export async function getInspectionSubmission(
 export async function startInspection(
   client: TenantClient,
   context: TenantContext,
-  input: Readonly<{ vehicleId: string; templateVersionId: string; driverId?: string | null }>,
+  input: Readonly<{
+    vehicleId: string;
+    templateVersionId: string;
+    driverId?: string | null | undefined;
+  }>,
 ) {
   requirePermission(context, "inspections.submit");
   return withTenantTransaction(client, context, async (tx) => {
@@ -311,13 +315,18 @@ export async function saveInspectionResponse(
     const question = await tx.inspectionQuestion.findUnique({
       where: { companyId_id: { companyId: context.companyId, id: input.questionId } },
     });
-    if (!question || question.templateVersionId !== submission.templateVersionId)
+    if (
+      !question ||
+      !question.isActive ||
+      question.templateVersionId !== submission.templateVersionId
+    )
       throw new TenantRecordNotFoundError("Inspection question");
     const options = await tx.inspectionQuestionOption.findMany({
       where: {
         companyId: context.companyId,
         templateVersionId: submission.templateVersionId,
         questionId: question.id,
+        isActive: true,
       },
     });
     const questionRule = rule({ ...question, options });
@@ -435,7 +444,12 @@ export async function attachInspectionResponseFile(
 export async function removeInspectionResponseFile(
   client: TenantClient,
   context: TenantContext,
-  input: Readonly<{ submissionId: string; responseFileId: string; reason: string }>,
+  input: Readonly<{
+    submissionId: string;
+    responseId: string;
+    responseFileId: string;
+    reason: string;
+  }>,
 ) {
   requirePermission(context, "inspections.submit");
   if (!input.reason.trim())
@@ -457,7 +471,8 @@ export async function removeInspectionResponseFile(
     const row = await tx.inspectionResponseFile.findUnique({
       where: { companyId_id: { companyId: context.companyId, id: input.responseFileId } },
     });
-    if (!row || row.removedAt) throw new TenantRecordNotFoundError("Inspection response file");
+    if (!row || row.removedAt || row.responseId !== input.responseId)
+      throw new TenantRecordNotFoundError("Inspection response file");
     const response = await tx.inspectionResponse.findUnique({
       where: { companyId_id: { companyId: context.companyId, id: row.responseId } },
       select: { submissionId: true },
@@ -506,10 +521,18 @@ export async function submitInspection(
       );
     await driverScopeFor(tx, context, submission.driverId);
     const questions = await tx.inspectionQuestion.findMany({
-      where: { companyId: context.companyId, templateVersionId: submission.templateVersionId },
+      where: {
+        companyId: context.companyId,
+        templateVersionId: submission.templateVersionId,
+        isActive: true,
+      },
     });
     const options = await tx.inspectionQuestionOption.findMany({
-      where: { companyId: context.companyId, templateVersionId: submission.templateVersionId },
+      where: {
+        companyId: context.companyId,
+        templateVersionId: submission.templateVersionId,
+        isActive: true,
+      },
     });
     const responses = await tx.inspectionResponse.findMany({
       where: { companyId: context.companyId, submissionId },

@@ -28,13 +28,13 @@ export type InspectionQuestionRule = Readonly<{
 }>;
 
 export type ResponseInput = Readonly<{
-  booleanValue?: boolean | null;
-  textValue?: string | null;
-  numberValue?: number | null;
-  odometerValueKm?: number | null;
-  optionIds?: readonly string[];
-  fileCount?: number;
-  comment?: string | null;
+  booleanValue?: boolean | null | undefined;
+  textValue?: string | null | undefined;
+  numberValue?: number | null | undefined;
+  odometerValueKm?: number | null | undefined;
+  optionIds?: readonly string[] | undefined;
+  fileCount?: number | undefined;
+  comment?: string | null | undefined;
 }>;
 
 export type DerivedResponse = Readonly<{

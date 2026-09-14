@@ -25,6 +25,32 @@ async function requireDraft(tx: TenantTransaction, context: TenantContext, versi
   return version;
 }
 
+async function activeDraftSection(
+  tx: TenantTransaction,
+  context: TenantContext,
+  sectionId: string,
+) {
+  const section = await tx.inspectionSection.findUnique({
+    where: { companyId_id: { companyId: context.companyId, id: sectionId } },
+  });
+  if (!section || !section.isActive) throw new TenantRecordNotFoundError("Inspection section");
+  await requireDraft(tx, context, section.templateVersionId);
+  return section;
+}
+
+async function activeDraftQuestion(
+  tx: TenantTransaction,
+  context: TenantContext,
+  questionId: string,
+) {
+  const question = await tx.inspectionQuestion.findUnique({
+    where: { companyId_id: { companyId: context.companyId, id: questionId } },
+  });
+  if (!question || !question.isActive) throw new TenantRecordNotFoundError("Inspection question");
+  await requireDraft(tx, context, question.templateVersionId);
+  return question;
+}
+
 async function lockTemplate(tx: TenantTransaction, context: TenantContext, templateId: string) {
   const rows = await tx.$queryRaw<Array<{ id: string }>>(
     Prisma.sql`SELECT id::text FROM inspection_templates WHERE company_id = ${context.companyId}::uuid AND id = ${templateId}::uuid FOR UPDATE`,
@@ -59,7 +85,7 @@ function questionRule(question: {
 export async function createInspectionTemplate(
   client: TenantClient,
   context: TenantContext,
-  input: Readonly<{ code: string; name: string; description?: string | null }>,
+  input: Readonly<{ code: string; name: string; description?: string | null | undefined }>,
 ) {
   requirePermission(context, "inspections.configure");
   return withTenantTransaction(client, context, async (tx) => {
@@ -102,7 +128,11 @@ export async function updateInspectionTemplate(
   client: TenantClient,
   context: TenantContext,
   templateId: string,
-  input: Readonly<{ name?: string; description?: string | null; isActive?: boolean }>,
+  input: Readonly<{
+    name?: string | undefined;
+    description?: string | null | undefined;
+    isActive?: boolean | undefined;
+  }>,
 ) {
   requirePermission(context, "inspections.configure");
   return withTenantTransaction(client, context, async (tx) => {
@@ -129,7 +159,8 @@ export async function updateInspectionTemplate(
 export async function addInspectionSection(
   client: TenantClient,
   context: TenantContext,
-  input: VersionInput & Readonly<{ title: string; description?: string | null; sortOrder: number }>,
+  input: VersionInput &
+    Readonly<{ title: string; description?: string | null | undefined; sortOrder: number }>,
 ) {
   requirePermission(context, "inspections.configure");
   return withTenantTransaction(client, context, async (tx) => {
@@ -153,24 +184,22 @@ export async function addInspectionQuestion(
     Readonly<{
       sectionId: string;
       label: string;
-      helpText?: string | null;
-      isRequired?: boolean;
+      helpText?: string | null | undefined;
+      isRequired?: boolean | undefined;
       responseType: InspectionQuestionRule["responseType"];
       sortOrder: number;
-      failureBooleanValue?: boolean | null;
-      minimumValue?: number | null;
-      maximumValue?: number | null;
-      commentRule?: InspectionQuestionRule["commentRule"];
-      photoRequirement?: InspectionQuestionRule["photoRequirement"];
+      failureBooleanValue?: boolean | null | undefined;
+      minimumValue?: number | null | undefined;
+      maximumValue?: number | null | undefined;
+      commentRule?: InspectionQuestionRule["commentRule"] | undefined;
+      photoRequirement?: InspectionQuestionRule["photoRequirement"] | undefined;
     }>,
 ) {
   requirePermission(context, "inspections.configure");
   return withTenantTransaction(client, context, async (tx) => {
     await requireDraft(tx, context, input.templateVersionId);
-    const section = await tx.inspectionSection.findUnique({
-      where: { companyId_id: { companyId: context.companyId, id: input.sectionId } },
-    });
-    if (!section || section.templateVersionId !== input.templateVersionId)
+    const section = await activeDraftSection(tx, context, input.sectionId);
+    if (section.templateVersionId !== input.templateVersionId)
       throw new TenantRecordNotFoundError("Inspection section");
     return tx.inspectionQuestion.create({
       data: {
@@ -195,16 +224,18 @@ export async function addInspectionQuestion(
 export async function addInspectionQuestionOption(
   client: TenantClient,
   context: TenantContext,
-  input: VersionInput &
-    Readonly<{ questionId: string; label: string; sortOrder: number; isFailure?: boolean }>,
+  input: Readonly<{
+    templateVersionId?: string | undefined;
+    questionId: string;
+    label: string;
+    sortOrder: number;
+    isFailure?: boolean | undefined;
+  }>,
 ) {
   requirePermission(context, "inspections.configure");
   return withTenantTransaction(client, context, async (tx) => {
-    await requireDraft(tx, context, input.templateVersionId);
-    const question = await tx.inspectionQuestion.findUnique({
-      where: { companyId_id: { companyId: context.companyId, id: input.questionId } },
-    });
-    if (!question || question.templateVersionId !== input.templateVersionId)
+    const question = await activeDraftQuestion(tx, context, input.questionId);
+    if (input.templateVersionId && question.templateVersionId !== input.templateVersionId)
       throw new TenantRecordNotFoundError("Inspection question");
     if (!["SINGLE_CHOICE", "MULTI_CHOICE"].includes(question.responseType))
       throw new ValidationError(
@@ -214,7 +245,7 @@ export async function addInspectionQuestionOption(
     return tx.inspectionQuestionOption.create({
       data: {
         companyId: context.companyId,
-        templateVersionId: input.templateVersionId,
+        templateVersionId: question.templateVersionId,
         questionId: input.questionId,
         label: input.label.trim(),
         sortOrder: input.sortOrder,
@@ -228,15 +259,15 @@ export async function updateInspectionSection(
   client: TenantClient,
   context: TenantContext,
   sectionId: string,
-  input: Readonly<{ title?: string; description?: string | null; sortOrder?: number }>,
+  input: Readonly<{
+    title?: string | undefined;
+    description?: string | null | undefined;
+    sortOrder?: number | undefined;
+  }>,
 ) {
   requirePermission(context, "inspections.configure");
   return withTenantTransaction(client, context, async (tx) => {
-    const section = await tx.inspectionSection.findUnique({
-      where: { companyId_id: { companyId: context.companyId, id: sectionId } },
-    });
-    if (!section) throw new TenantRecordNotFoundError("Inspection section");
-    await requireDraft(tx, context, section.templateVersionId);
+    await activeDraftSection(tx, context, sectionId);
     return tx.inspectionSection.update({
       where: { companyId_id: { companyId: context.companyId, id: sectionId } },
       data: {
@@ -255,24 +286,20 @@ export async function updateInspectionQuestion(
   context: TenantContext,
   questionId: string,
   input: Readonly<{
-    label?: string;
-    helpText?: string | null;
-    isRequired?: boolean;
-    sortOrder?: number;
-    failureBooleanValue?: boolean | null;
-    minimumValue?: number | null;
-    maximumValue?: number | null;
-    commentRule?: InspectionQuestionRule["commentRule"];
-    photoRequirement?: InspectionQuestionRule["photoRequirement"];
+    label?: string | undefined;
+    helpText?: string | null | undefined;
+    isRequired?: boolean | undefined;
+    sortOrder?: number | undefined;
+    failureBooleanValue?: boolean | null | undefined;
+    minimumValue?: number | null | undefined;
+    maximumValue?: number | null | undefined;
+    commentRule?: InspectionQuestionRule["commentRule"] | undefined;
+    photoRequirement?: InspectionQuestionRule["photoRequirement"] | undefined;
   }>,
 ) {
   requirePermission(context, "inspections.configure");
   return withTenantTransaction(client, context, async (tx) => {
-    const question = await tx.inspectionQuestion.findUnique({
-      where: { companyId_id: { companyId: context.companyId, id: questionId } },
-    });
-    if (!question) throw new TenantRecordNotFoundError("Inspection question");
-    await requireDraft(tx, context, question.templateVersionId);
+    await activeDraftQuestion(tx, context, questionId);
     return tx.inspectionQuestion.update({
       where: { companyId_id: { companyId: context.companyId, id: questionId } },
       data: {
@@ -294,14 +321,109 @@ export async function updateInspectionQuestion(
   });
 }
 
+export async function updateInspectionQuestionOption(
+  client: TenantClient,
+  context: TenantContext,
+  optionId: string,
+  input: Readonly<{
+    label?: string | undefined;
+    sortOrder?: number | undefined;
+    isFailure?: boolean | undefined;
+  }>,
+) {
+  requirePermission(context, "inspections.configure");
+  return withTenantTransaction(client, context, async (tx) => {
+    const option = await tx.inspectionQuestionOption.findUnique({
+      where: { companyId_id: { companyId: context.companyId, id: optionId } },
+    });
+    if (!option || !option.isActive)
+      throw new TenantRecordNotFoundError("Inspection question option");
+    await activeDraftQuestion(tx, context, option.questionId);
+    return tx.inspectionQuestionOption.update({
+      where: { companyId_id: { companyId: context.companyId, id: optionId } },
+      data: {
+        ...(input.label === undefined ? {} : { label: input.label.trim() }),
+        ...(input.sortOrder === undefined ? {} : { sortOrder: input.sortOrder }),
+        ...(input.isFailure === undefined ? {} : { isFailure: input.isFailure }),
+      },
+    });
+  });
+}
+
+export async function removeInspectionSection(
+  client: TenantClient,
+  context: TenantContext,
+  sectionId: string,
+) {
+  requirePermission(context, "inspections.configure");
+  return withTenantTransaction(client, context, async (tx) => {
+    const section = await activeDraftSection(tx, context, sectionId);
+    const questions = await tx.inspectionQuestion.findMany({
+      where: { companyId: context.companyId, sectionId, isActive: true },
+      select: { id: true },
+    });
+    await tx.inspectionSection.update({
+      where: { companyId_id: { companyId: context.companyId, id: section.id } },
+      data: { isActive: false },
+    });
+    await tx.inspectionQuestion.updateMany({
+      where: { companyId: context.companyId, sectionId, isActive: true },
+      data: { isActive: false },
+    });
+    await tx.inspectionQuestionOption.updateMany({
+      where: { companyId: context.companyId, questionId: { in: questions.map((item) => item.id) } },
+      data: { isActive: false },
+    });
+  });
+}
+
+export async function removeInspectionQuestion(
+  client: TenantClient,
+  context: TenantContext,
+  questionId: string,
+) {
+  requirePermission(context, "inspections.configure");
+  return withTenantTransaction(client, context, async (tx) => {
+    const question = await activeDraftQuestion(tx, context, questionId);
+    await tx.inspectionQuestion.update({
+      where: { companyId_id: { companyId: context.companyId, id: question.id } },
+      data: { isActive: false },
+    });
+    await tx.inspectionQuestionOption.updateMany({
+      where: { companyId: context.companyId, questionId: question.id, isActive: true },
+      data: { isActive: false },
+    });
+  });
+}
+
+export async function removeInspectionQuestionOption(
+  client: TenantClient,
+  context: TenantContext,
+  optionId: string,
+) {
+  requirePermission(context, "inspections.configure");
+  return withTenantTransaction(client, context, async (tx) => {
+    const option = await tx.inspectionQuestionOption.findUnique({
+      where: { companyId_id: { companyId: context.companyId, id: optionId } },
+    });
+    if (!option || !option.isActive)
+      throw new TenantRecordNotFoundError("Inspection question option");
+    await activeDraftQuestion(tx, context, option.questionId);
+    await tx.inspectionQuestionOption.update({
+      where: { companyId_id: { companyId: context.companyId, id: option.id } },
+      data: { isActive: false },
+    });
+  });
+}
+
 export async function configureInspectionApplicability(
   client: TenantClient,
   context: TenantContext,
   input: VersionInput &
     Readonly<{
       mode: "ALL_ELIGIBLE" | "VEHICLE_CATEGORIES" | "SPECIFIC_VEHICLES";
-      vehicleCategoryIds?: readonly string[];
-      vehicleIds?: readonly string[];
+      vehicleCategoryIds?: readonly string[] | undefined;
+      vehicleIds?: readonly string[] | undefined;
     }>,
 ) {
   requirePermission(context, "inspections.configure");
@@ -391,14 +513,14 @@ export async function publishInspectionTemplateVersion(
     const version = await requireDraft(tx, context, templateVersionId);
     await lockTemplate(tx, context, version.templateId);
     const sections = await tx.inspectionSection.findMany({
-      where: { companyId: context.companyId, templateVersionId },
+      where: { companyId: context.companyId, templateVersionId, isActive: true },
       orderBy: { sortOrder: "asc" },
     });
     const questions = await tx.inspectionQuestion.findMany({
-      where: { companyId: context.companyId, templateVersionId },
+      where: { companyId: context.companyId, templateVersionId, isActive: true },
     });
     const options = await tx.inspectionQuestionOption.findMany({
-      where: { companyId: context.companyId, templateVersionId },
+      where: { companyId: context.companyId, templateVersionId, isActive: true },
     });
     const rules = sections.map((section) => ({
       id: section.id,
@@ -478,7 +600,7 @@ export async function clonePublishedInspectionTemplateVersion(
       },
     });
     const sections = await tx.inspectionSection.findMany({
-      where: { companyId: context.companyId, templateVersionId: source.id },
+      where: { companyId: context.companyId, templateVersionId: source.id, isActive: true },
     });
     const sectionMap = new Map<string, string>();
     for (const section of sections) {
@@ -494,7 +616,7 @@ export async function clonePublishedInspectionTemplateVersion(
       sectionMap.set(section.id, created.id);
     }
     const questions = await tx.inspectionQuestion.findMany({
-      where: { companyId: context.companyId, templateVersionId: source.id },
+      where: { companyId: context.companyId, templateVersionId: source.id, isActive: true },
     });
     const questionMap = new Map<string, string>();
     for (const question of questions) {
@@ -518,7 +640,7 @@ export async function clonePublishedInspectionTemplateVersion(
       questionMap.set(question.id, created.id);
     }
     const options = await tx.inspectionQuestionOption.findMany({
-      where: { companyId: context.companyId, templateVersionId: source.id },
+      where: { companyId: context.companyId, templateVersionId: source.id, isActive: true },
     });
     for (const option of options)
       await tx.inspectionQuestionOption.create({

@@ -660,12 +660,12 @@ model InspectionSection {
   title             String
   description       String?
   sortOrder         Int      @map("sort_order")
+  isActive          Boolean  @default(true) @map("is_active")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
   @@unique([companyId, id])
   @@unique([companyId, templateVersionId, id])
-  @@unique([companyId, templateVersionId, sortOrder])
   @@map("inspection_sections")
 }
 
@@ -684,13 +684,13 @@ model InspectionQuestion {
   maximumValue        Decimal?                   @map("maximum_value") @db.Decimal(14, 2)
   commentRule         InspectionCommentRule      @default(OPTIONAL) @map("comment_rule")
   photoRequirement    InspectionPhotoRequirement @default(NEVER) @map("photo_requirement")
+  isActive            Boolean                    @default(true) @map("is_active")
   createdAt           DateTime                   @default(now()) @map("created_at")
   updatedAt           DateTime                   @updatedAt @map("updated_at")
 
   @@unique([companyId, id])
   @@unique([companyId, templateVersionId, id])
   @@unique([companyId, templateVersionId, sectionId, id], map: "inspection_questions_company_version_section_id_key")
-  @@unique([companyId, templateVersionId, sectionId, sortOrder], map: "inspection_questions_company_version_section_order_key")
   @@map("inspection_questions")
 }
 
@@ -702,12 +702,12 @@ model InspectionQuestionOption {
   label             String
   sortOrder         Int      @map("sort_order")
   isFailure         Boolean  @default(false) @map("is_failure")
+  isActive          Boolean  @default(true) @map("is_active")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
   @@unique([companyId, id])
   @@unique([companyId, templateVersionId, questionId, id])
-  @@unique([companyId, questionId, sortOrder])
   @@map("inspection_question_options")
 }
 
