@@ -97,10 +97,23 @@ const phase3bTables = [
   "driver_licence_files",
   "document_review_history",
 ];
+const phase3cTables = [
+  "inspection_templates",
+  "inspection_template_versions",
+  "inspection_sections",
+  "inspection_questions",
+  "inspection_question_options",
+  "inspection_template_category_applicabilities",
+  "inspection_template_vehicle_applicabilities",
+  "inspection_submissions",
+  "inspection_responses",
+  "inspection_response_options",
+  "inspection_response_files",
+];
+
 const phase3aDeferredTables = [
   "driver_documents",
   "vehicle_documents",
-  "inspection_templates",
   "inspection_template_items",
   "inspections",
   "inspection_items",
@@ -122,6 +135,10 @@ const phase3bFoundationMigration =
   "prisma/migrations/20260906000300_phase3b_documents_compliance_foundation/migration.sql";
 const phase3bExemptionEffectiveFromNullableMigration =
   "prisma/migrations/20260909000100_phase3b_exemption_effective_from_nullable/migration.sql";
+const phase3cFoundationMigration =
+  "prisma/migrations/20260913000100_phase3c_inspection_engine_foundation/migration.sql";
+const phase3cSoftRemovalMigration =
+  "prisma/migrations/20260913000200_phase3c2_draft_configuration_soft_removal/migration.sql";
 const hardenedMembershipPolicies = [
   "memberships_select_bootstrap_or_tenant",
   "memberships_insert_self",
@@ -297,6 +314,51 @@ async function main() {
       "phase3b_exemption_effective_from_nullable_migration_apply: FAIL expected exemption effective_from column is missing",
     );
   }
+  const phase3cPresent = new Set(
+    (await admin.query("SELECT tablename FROM pg_tables WHERE schemaname='public'")).rows.map(
+      (x) => x.tablename,
+    ),
+  );
+
+  if (phase3cTables.every((name) => phase3cPresent.has(name))) {
+    console.log("phase3c_migration_apply: PASS (already applied)");
+  } else if (phase3cTables.some((name) => phase3cPresent.has(name))) {
+    throw new Error(
+      "phase3c_migration_apply: FAIL partial Phase 3C validation schema detected; manual review required before retry",
+    );
+  } else {
+    console.log("phase3c_migration_apply: START");
+    await m.query("BEGIN");
+    try {
+      await m.query(await readFile(phase3cFoundationMigration, "utf8"));
+      await m.query("COMMIT");
+    } catch (error) {
+      await m.query("ROLLBACK");
+      throw error;
+    }
+    console.log("phase3c_migration_apply: PASS");
+  }
+
+  const phase3cSoftRemovalColumns = await admin.query(
+    "SELECT table_name FROM information_schema.columns WHERE table_schema='public' AND column_name='is_active' AND table_name = ANY($1::text[])",
+    [["inspection_sections", "inspection_questions", "inspection_question_options"]],
+  );
+  const phase3cSoftRemovalTables = new Set(
+    phase3cSoftRemovalColumns.rows.map((row) => row.table_name),
+  );
+
+  if (phase3cSoftRemovalTables.size === 3) {
+    console.log("phase3c_soft_removal_migration_apply: PASS (already applied)");
+  } else if (phase3cSoftRemovalTables.size === 0) {
+    console.log("phase3c_soft_removal_migration_apply: START");
+    await m.query(await readFile(phase3cSoftRemovalMigration, "utf8"));
+    console.log("phase3c_soft_removal_migration_apply: PASS");
+  } else {
+    throw new Error(
+      "phase3c_soft_removal_migration_apply: FAIL partial Phase 3C.2 migration state detected; manual review required before retry",
+    );
+  }
+
   const membershipPolicies = await admin.query(
     "SELECT policyname FROM pg_policies WHERE schemaname='public' AND tablename='company_memberships'",
   );
