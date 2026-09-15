@@ -11,12 +11,13 @@ const context: TenantContext = {
   permissions: new Set(["vehicles.manage", "vehicles.read"]),
 };
 
-function fakeClient(currentStatus = "ACTIVE") {
+function fakeClient(currentStatus = "ACTIVE", activeDefectHolds = 0) {
   const histories: Array<Record<string, unknown>> = [];
   const readings: Array<Record<string, unknown>> = [];
   const audits: Array<Record<string, unknown>> = [];
   const transaction = {
     $executeRaw: async (_strings: TemplateStringsArray, ..._values: unknown[]) => 1,
+    $queryRaw: async () => [{ id: "vehicle-a" }],
     vehicleCategory: { findFirst: async () => ({ id: "category-a" }) },
     vehicle: {
       create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "vehicle-a", ...data }),
@@ -35,6 +36,7 @@ function fakeClient(currentStatus = "ACTIVE") {
         ...data,
       }),
     },
+    vehicleDefectHold: { count: async () => activeDefectHolds },
     vehicleOdometerReading: {
       create: async ({ data }: { data: Record<string, unknown> }) => ({
         id: `reading-${readings.push(data)}`,
@@ -93,5 +95,16 @@ describe("vehicle application service", () => {
         reason: "Administrative clearance",
       }),
     ).resolves.toMatchObject({ operationalStatus: "ACTIVE" });
+    await expect(
+      changeManualVehicleStatus(
+        fakeClient("OUT_OF_SERVICE", 1).client as never,
+        context,
+        "vehicle-a",
+        {
+          status: "ACTIVE",
+          reason: "Attempted bypass",
+        },
+      ),
+    ).rejects.toMatchObject({ code: "VEHICLE_DEFECT_RELEASE_REQUIRED" });
   });
 });

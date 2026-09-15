@@ -193,6 +193,7 @@ export async function addInspectionQuestion(
       maximumValue?: number | null | undefined;
       commentRule?: InspectionQuestionRule["commentRule"] | undefined;
       photoRequirement?: InspectionQuestionRule["photoRequirement"] | undefined;
+      operationalImpact?: "NON_BLOCKING" | "VEHICLE_BLOCKING" | undefined;
     }>,
 ) {
   requirePermission(context, "inspections.configure");
@@ -216,6 +217,7 @@ export async function addInspectionQuestion(
         maximumValue: input.maximumValue ?? null,
         commentRule: input.commentRule ?? "OPTIONAL",
         photoRequirement: input.photoRequirement ?? "NEVER",
+        operationalImpact: input.operationalImpact ?? "NON_BLOCKING",
       },
     });
   });
@@ -295,6 +297,7 @@ export async function updateInspectionQuestion(
     maximumValue?: number | null | undefined;
     commentRule?: InspectionQuestionRule["commentRule"] | undefined;
     photoRequirement?: InspectionQuestionRule["photoRequirement"] | undefined;
+    operationalImpact?: "NON_BLOCKING" | "VEHICLE_BLOCKING" | undefined;
   }>,
 ) {
   requirePermission(context, "inspections.configure");
@@ -316,6 +319,9 @@ export async function updateInspectionQuestion(
         ...(input.photoRequirement === undefined
           ? {}
           : { photoRequirement: input.photoRequirement }),
+        ...(input.operationalImpact === undefined
+          ? {}
+          : { operationalImpact: input.operationalImpact }),
       },
     });
   });
@@ -635,6 +641,7 @@ export async function clonePublishedInspectionTemplateVersion(
           maximumValue: question.maximumValue,
           commentRule: question.commentRule,
           photoRequirement: question.photoRequirement,
+          operationalImpact: question.operationalImpact,
         },
       });
       questionMap.set(question.id, created.id);

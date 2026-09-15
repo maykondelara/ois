@@ -15,6 +15,7 @@ import {
   submitInspectionOdometerReadingInTenantTransaction,
 } from "@/modules/vehicles/odometer.service";
 import type { OdometerConfirmationTokenService } from "@/modules/vehicles/odometer-confirmation";
+import { createIssuesForFailedInspectionResponses } from "@/modules/issues/issue.service";
 
 type TenantClient = Pick<PrismaClient, "$transaction">;
 
@@ -613,6 +614,8 @@ export async function submitInspection(
       where: { companyId_id: { companyId: context.companyId, id: submissionId } },
       data: { status: "SUBMITTED", outcome, submittedAt: new Date() },
     });
+    if (outcome === "FAIL")
+      await createIssuesForFailedInspectionResponses(tx, context, submitted, responses, questions);
     await recordTenantActivity(tx, context, {
       action: "inspection.submitted",
       entityType: "inspection_submission",

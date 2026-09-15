@@ -1,4 +1,4 @@
-import type { PrismaClient, VehicleOperationalStatus } from "@prisma/client";
+import { Prisma, type PrismaClient, type VehicleOperationalStatus } from "@prisma/client";
 import { withTenantTransaction } from "@/db/tenant-transaction";
 import { ConflictError, TenantRecordNotFoundError, ValidationError } from "@/lib/errors";
 import { recordTenantActivity } from "@/modules/activities/audit.service";
@@ -233,7 +233,22 @@ export async function changeManualVehicleStatus(
   requirePermission(context, "vehicles.manage");
   const input = vehicleStatusSchema.parse(rawInput);
   return withTenantTransaction(client, context, async (transaction) => {
+    const locked = await transaction.$queryRaw<Array<{ id: string }>>(
+      Prisma.sql`SELECT id::text FROM vehicles WHERE company_id = ${context.companyId}::uuid AND id = ${vehicleId}::uuid FOR UPDATE`,
+    );
+    if (locked.length !== 1) throw new TenantRecordNotFoundError("Vehicle");
     const vehicle = await requireVehicle(transaction, context, vehicleId);
+    if (
+      vehicle.operationalStatus === "OUT_OF_SERVICE" &&
+      input.status === "ACTIVE" &&
+      (await transaction.vehicleDefectHold.count({
+        where: { companyId: context.companyId, vehicleId, releasedAt: null },
+      })) > 0
+    )
+      throw new ConflictError(
+        "VEHICLE_DEFECT_RELEASE_REQUIRED",
+        "Vehicle with an active defect hold must use the authorized release operation",
+      );
     validateManualVehicleStatusTransition(vehicle.operationalStatus, input.status, input.reason);
     const updated = await transaction.vehicle.update({
       where: { companyId_id: { companyId: context.companyId, id: vehicleId } },

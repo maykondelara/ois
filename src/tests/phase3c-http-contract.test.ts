@@ -47,6 +47,7 @@ describe("Phase 3C.2 inspection HTTP contracts", () => {
       maximumValue: null,
       commentRule: "OPTIONAL",
       photoRequirement: "NEVER",
+      operationalImpact: "NON_BLOCKING",
       isActive: true,
       createdAt: new Date(),
       updatedAt: new Date(),

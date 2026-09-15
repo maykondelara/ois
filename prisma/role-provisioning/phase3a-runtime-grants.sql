@@ -32,5 +32,9 @@ GRANT SELECT, INSERT, UPDATE ON inspection_submissions TO :"runtime_role";
 GRANT SELECT, INSERT, UPDATE ON inspection_responses TO :"runtime_role";
 GRANT SELECT, INSERT, UPDATE ON inspection_response_options TO :"runtime_role";
 GRANT SELECT, INSERT, UPDATE ON inspection_response_files TO :"runtime_role";
+GRANT SELECT, INSERT, UPDATE ON issues TO :"runtime_role";
+GRANT SELECT, INSERT ON issue_status_history TO :"runtime_role";
+GRANT SELECT, INSERT ON issue_actions TO :"runtime_role";
+GRANT SELECT, INSERT, UPDATE ON vehicle_defect_holds TO :"runtime_role";
 
 REVOKE CREATE ON SCHEMA public FROM :"runtime_role";
