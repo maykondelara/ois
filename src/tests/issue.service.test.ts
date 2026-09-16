@@ -1,8 +1,10 @@
 /* eslint-disable no-unused-vars */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { TenantContext } from "@/modules/identity/tenant-context";
 import {
+  addIssueAction,
   createIssuesForFailedInspectionResponses,
+  getIssue,
   releaseVehicleFromResolvedIssues,
 } from "@/modules/issues/issue.service";
 
@@ -253,6 +255,42 @@ describe("vehicle defect release", () => {
         { ...manager, role: "DRIVER", permissions: new Set(["issues.read"]) },
         submission.vehicleId,
         "Unsafe request",
+      ),
+    ).rejects.toMatchObject({ name: "AuthorizationError" });
+  });
+});
+
+describe("issue mutation authorization", () => {
+  it("denies DRIVER management before opening a transaction", async () => {
+    const transaction = vi.fn();
+    await expect(
+      addIssueAction(
+        { $transaction: transaction } as never,
+        { ...manager, role: "DRIVER", permissions: new Set(["issues.read"]) },
+        "issue-a",
+        { actionType: "REPAIR", description: "Attempt" },
+      ),
+    ).rejects.toMatchObject({ name: "AuthorizationError" });
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it("conceals an issue outside DRIVER self-scope", async () => {
+    const tx = {
+      $executeRaw: async () => 1,
+      issue: { findUnique: async () => ({ id: "issue-a", inspectionSubmissionId: submission.id }) },
+      inspectionSubmission: { findUnique: async () => ({ driverId: "driver-other" }) },
+      driver: {
+        findUnique: async () => ({ companyId: manager.companyId, userId: "another-user" }),
+      },
+    };
+    const client = {
+      $transaction: async <T>(operation: (value: typeof tx) => Promise<T>) => operation(tx),
+    };
+    await expect(
+      getIssue(
+        client as never,
+        { ...manager, role: "DRIVER", permissions: new Set(["issues.read"]) },
+        "issue-a",
       ),
     ).rejects.toMatchObject({ name: "AuthorizationError" });
   });

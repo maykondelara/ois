@@ -5,6 +5,7 @@ import {
   type InspectionSubmission,
   type IssueActionType,
   type IssueSeverity,
+  type IssueStatus,
   type PrismaClient,
 } from "@prisma/client";
 import { withTenantTransaction, type TenantTransaction } from "@/db/tenant-transaction";
@@ -15,6 +16,13 @@ import type { TenantContext } from "@/modules/identity/tenant-context";
 import { initialIssueSeverity, validateIssueStatusTransition } from "@/modules/issues/issue-rules";
 
 type TenantClient = Pick<PrismaClient, "$transaction">;
+type IssuePage = Readonly<{ number: number; pageSize: number }>;
+export type IssueListFilters = Readonly<{
+  status?: IssueStatus | undefined;
+  severity?: IssueSeverity | undefined;
+  operationalImpact?: "NON_BLOCKING" | "VEHICLE_BLOCKING" | undefined;
+  vehicleId?: string | undefined;
+}>;
 
 async function lockVehicle(tx: TenantTransaction, context: TenantContext, vehicleId: string) {
   const rows = await tx.$queryRaw<Array<{ id: string }>>(
@@ -175,7 +183,7 @@ export async function getIssue(client: TenantClient, context: TenantContext, iss
   return withTenantTransaction(client, context, async (tx) => {
     const issue = await requireIssue(tx, context, issueId);
     await requireDriverIssueScope(tx, context, issue.inspectionSubmissionId);
-    const [history, actions] = await Promise.all([
+    const [history, actions, vehicle, holds] = await Promise.all([
       tx.issueStatusHistory.findMany({
         where: { companyId: context.companyId, issueId },
         orderBy: [{ occurredAt: "asc" }, { id: "asc" }],
@@ -184,8 +192,84 @@ export async function getIssue(client: TenantClient, context: TenantContext, iss
         where: { companyId: context.companyId, issueId },
         orderBy: [{ occurredAt: "asc" }, { id: "asc" }],
       }),
+      tx.vehicle.findUnique({
+        where: { companyId_id: { companyId: context.companyId, id: issue.vehicleId } },
+        select: { id: true, registrationDisplay: true, operationalStatus: true },
+      }),
+      tx.vehicleDefectHold.findMany({
+        where: { companyId: context.companyId, issueId },
+        orderBy: { createdAt: "asc" },
+      }),
     ]);
-    return { issue, history, actions };
+    if (!vehicle) throw new TenantRecordNotFoundError("Vehicle");
+    return { issue, history, actions, vehicle, holds };
+  });
+}
+
+export async function listIssuesPage(
+  client: TenantClient,
+  context: TenantContext,
+  page: IssuePage,
+  filters: IssueListFilters = {},
+) {
+  requirePermission(context, "issues.read");
+  return withTenantTransaction(client, context, async (tx) => {
+    const where = {
+      companyId: context.companyId,
+      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.severity ? { severity: filters.severity } : {}),
+      ...(filters.operationalImpact ? { operationalImpact: filters.operationalImpact } : {}),
+      ...(filters.vehicleId ? { vehicleId: filters.vehicleId } : {}),
+    };
+    let ids: string[] | null = null;
+    if (context.role === "DRIVER") {
+      const driver = await tx.driver.findUnique({
+        where: {
+          companyId_userId: {
+            companyId: context.companyId,
+            userId: context.actorUserId,
+          },
+        },
+        select: { id: true },
+      });
+      if (!driver) throw new TenantRecordNotFoundError("Driver");
+      const clauses: Prisma.Sql[] = [
+        Prisma.sql`i.company_id = ${context.companyId}::uuid`,
+        Prisma.sql`s.driver_id = ${driver.id}::uuid`,
+      ];
+      if (filters.status) clauses.push(Prisma.sql`i.status = ${filters.status}::"IssueStatus"`);
+      if (filters.severity)
+        clauses.push(Prisma.sql`i.severity = ${filters.severity}::"IssueSeverity"`);
+      if (filters.operationalImpact)
+        clauses.push(
+          Prisma.sql`i.operational_impact = ${filters.operationalImpact}::"InspectionOperationalImpact"`,
+        );
+      if (filters.vehicleId) clauses.push(Prisma.sql`i.vehicle_id = ${filters.vehicleId}::uuid`);
+      const rows = await tx.$queryRaw<Array<{ id: string }>>(
+        Prisma.sql`SELECT i.id::text
+          FROM issues i
+          JOIN inspection_submissions s
+            ON s.company_id = i.company_id AND s.id = i.inspection_submission_id
+          WHERE ${Prisma.join(clauses, " AND ")}
+          ORDER BY i.created_at DESC, i.id DESC
+          OFFSET ${(page.number - 1) * page.pageSize}
+          LIMIT ${page.pageSize + 1}`,
+      );
+      ids = rows.map((row) => row.id);
+    }
+    const data = await tx.issue.findMany({
+      where: { ...where, ...(ids === null ? {} : { id: { in: ids } }) },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      ...(ids === null ? { skip: (page.number - 1) * page.pageSize, take: page.pageSize + 1 } : {}),
+    });
+    const ordered =
+      ids === null
+        ? data
+        : ids.flatMap((id) => {
+            const issue = data.find((candidate) => candidate.id === id);
+            return issue ? [issue] : [];
+          });
+    return { data: ordered.slice(0, page.pageSize), hasNextPage: ordered.length > page.pageSize };
   });
 }
 
