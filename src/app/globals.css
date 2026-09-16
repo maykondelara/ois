@@ -297,6 +297,66 @@ a {
   background: #eceeeb;
   color: #536057;
 }
+.readiness {
+  align-self: flex-start;
+  border-radius: 999px;
+  padding: 0.65rem 0.9rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+}
+.readiness-ready {
+  background: #ddf1e2;
+  color: #175a2a;
+}
+.readiness-in_progress {
+  background: #fff0bd;
+  color: #654f00;
+}
+.readiness-not_started {
+  background: #eceeeb;
+  color: #536057;
+}
+.setup-checklist {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1.25rem;
+}
+.setup-step {
+  display: grid;
+  grid-template-columns: 85px 1fr auto;
+  align-items: center;
+  gap: 1rem;
+  border: 1px solid #e0e5df;
+  border-radius: 10px;
+  padding: 0.9rem;
+  background: white;
+  color: #17211b;
+  text-decoration: none;
+}
+.setup-step span {
+  display: grid;
+  gap: 0.25rem;
+}
+.setup-step em {
+  color: #246b3a;
+  font-style: normal;
+  font-weight: 700;
+}
+.check-complete,
+.check-missing {
+  border-radius: 999px;
+  padding: 0.35rem 0.5rem;
+  text-align: center;
+  font-size: 0.7rem;
+}
+.check-complete {
+  background: #ddf1e2;
+  color: #175a2a;
+}
+.check-missing {
+  background: #fae4e1;
+  color: #81281f;
+}
 button,
 input,
 select,
@@ -665,6 +725,9 @@ legend {
   .workspace-detail {
     position: static;
     max-height: none;
+  }
+  .setup-step {
+    grid-template-columns: 1fr;
   }
   .filter-row,
   .provenance,
