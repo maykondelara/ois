@@ -6,6 +6,7 @@ import type {
   Vehicle,
   VehicleCategory,
   VehicleOdometerReading,
+  VehicleStatusHistory,
 } from "@prisma/client";
 import type { SafeDriverLicence } from "@/modules/drivers/driver-licence.service";
 import type {
@@ -41,6 +42,7 @@ export type VehicleCategorySummary = Readonly<{
   code: string;
   name: string;
   isActive: boolean;
+  requiredLicenceClass: VehicleCategory["requiredLicenceClass"];
 }>;
 export type VehicleSummary = Readonly<{
   id: string;
@@ -70,6 +72,14 @@ export type VehicleDetail = VehicleSummary &
     kilometresRemaining: number | null;
     latestAcceptedReading: OdometerSnapshot["latestAcceptedReading"];
   }>;
+export type VehicleStatusHistorySummary = Readonly<{
+  id: string;
+  fromStatus: VehicleStatusHistory["fromStatus"];
+  toStatus: VehicleStatusHistory["toStatus"];
+  reason: string | null;
+  source: VehicleStatusHistory["source"];
+  occurredAt: string;
+}>;
 export type OdometerReviewResult = Readonly<{
   id: string;
   readingKm: number;
@@ -123,6 +133,7 @@ export const categoryDto = (category: VehicleCategory): VehicleCategorySummary =
   code: category.code,
   name: category.name,
   isActive: category.isActive,
+  requiredLicenceClass: category.requiredLicenceClass,
 });
 export const capabilityDto = (capability: DriverVehicleCapability) => ({
   id: capability.id,
@@ -139,6 +150,16 @@ export const vehicleDto = (vehicle: Vehicle): VehicleSummary => ({
   depotLocationId: vehicle.depotLocationId,
   registrationExpiresOn: iso(vehicle.registrationExpiresOn),
   nextServiceOdometerKm: vehicle.nextServiceOdometerKm,
+});
+export const vehicleStatusHistoryDto = (
+  entry: VehicleStatusHistory,
+): VehicleStatusHistorySummary => ({
+  id: entry.id,
+  fromStatus: entry.fromStatus,
+  toStatus: entry.toStatus,
+  reason: entry.reason,
+  source: entry.source,
+  occurredAt: entry.occurredAt.toISOString(),
 });
 /** Detail-only derived fields are calculated from immutable odometer provenance. */
 export const vehicleDetailDto = (

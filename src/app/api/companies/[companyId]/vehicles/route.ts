@@ -29,6 +29,7 @@ export async function GET(
     });
     return {
       data: result.data.map(vehicleDto),
+      capabilities: { canManage: context.permissions.has("vehicles.manage") },
       page: { number: page.number, pageSize: page.pageSize, hasNextPage: result.hasNextPage },
     };
   });

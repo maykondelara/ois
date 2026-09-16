@@ -38,6 +38,7 @@ export async function GET(
     });
     return {
       data: result.data.map(driverDto),
+      capabilities: { canManage: context.permissions.has("drivers.manage") },
       page: { number: page.number, pageSize: page.pageSize, hasNextPage: result.hasNextPage },
     };
   });

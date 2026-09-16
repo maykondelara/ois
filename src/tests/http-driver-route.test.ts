@@ -51,6 +51,7 @@ describe("driver list route", () => {
     );
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
+      capabilities: { canManage: true },
       data: [
         {
           id: "driver-a",

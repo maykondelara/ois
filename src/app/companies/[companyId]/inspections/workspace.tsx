@@ -214,12 +214,6 @@ export default function InspectionWorkspace({ companyId }: Readonly<{ companyId:
           <p className="eyebrow">Operations</p>
           <h1>Vehicle inspections</h1>
         </div>
-        <nav className="operation-nav">
-          <a className="active" href={`/companies/${companyId}/inspections`}>
-            Inspections
-          </a>
-          <a href={`/companies/${companyId}/issues`}>Issues</a>
-        </nav>
       </header>
       {error ? (
         <p className="message error" role="alert">

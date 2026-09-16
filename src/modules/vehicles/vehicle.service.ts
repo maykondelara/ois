@@ -132,6 +132,22 @@ export async function getVehicle(client: TenantClient, context: TenantContext, v
   );
 }
 
+export async function listVehicleStatusHistory(
+  client: TenantClient,
+  context: TenantContext,
+  vehicleId: string,
+) {
+  requirePermission(context, "vehicles.read");
+  return withTenantTransaction(client, context, async (transaction) => {
+    await requireVehicle(transaction, context, vehicleId);
+    return transaction.vehicleStatusHistory.findMany({
+      where: { companyId: context.companyId, vehicleId },
+      orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+      take: 100,
+    });
+  });
+}
+
 export async function listVehicles(client: TenantClient, context: TenantContext, search?: string) {
   requirePermission(context, "vehicles.read");
   return withTenantTransaction(client, context, (transaction) =>
