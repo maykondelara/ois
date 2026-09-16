@@ -2,6 +2,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import PilotProvisioning from "./provisioning";
 
 type Profile = { id: string; name: string; slug: string; timezone: string; status: string };
 type Settings = {
@@ -267,6 +268,7 @@ export default function SetupWorkspace({ companyId }: Readonly<{ companyId: stri
               })}
             </div>
           </section>
+          <PilotProvisioning companyId={companyId} onApplied={load} />
           <section className="panel" id="company-profile">
             <p className="eyebrow">Step 1</p>
             <h2>Company profile</h2>
