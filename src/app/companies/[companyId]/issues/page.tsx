@@ -2,7 +2,12 @@ import IssuesWorkspace from "./workspace";
 
 export default async function IssuesPage({
   params,
-}: Readonly<{ params: Promise<{ companyId: string }> }>) {
+  searchParams,
+}: Readonly<{
+  params: Promise<{ companyId: string }>;
+  searchParams: Promise<{ vehicleId?: string }>;
+}>) {
   const { companyId } = await params;
-  return <IssuesWorkspace companyId={companyId} />;
+  const { vehicleId } = await searchParams;
+  return <IssuesWorkspace companyId={companyId} initialVehicleId={vehicleId ?? ""} />;
 }

@@ -56,7 +56,10 @@ const post = (body: unknown): FetchOptions => ({
   body: JSON.stringify(body),
 });
 
-export default function IssuesWorkspace({ companyId }: Readonly<{ companyId: string }>) {
+export default function IssuesWorkspace({
+  companyId,
+  initialVehicleId,
+}: Readonly<{ companyId: string; initialVehicleId: string }>) {
   const base = `/api/companies/${companyId}`;
   const [issues, setIssues] = useState<Issue[]>([]);
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -68,6 +71,7 @@ export default function IssuesWorkspace({ companyId }: Readonly<{ companyId: str
   const [status, setStatus] = useState("");
   const [severity, setSeverity] = useState("");
   const [blocking, setBlocking] = useState("");
+  const [vehicleId, setVehicleId] = useState(initialVehicleId);
   const [page, setPage] = useState(1);
   const [hasNextPage, setHasNextPage] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -81,6 +85,7 @@ export default function IssuesWorkspace({ companyId }: Readonly<{ companyId: str
     if (status) query.set("status", status);
     if (severity) query.set("severity", severity);
     if (blocking) query.set("blocking", blocking);
+    if (vehicleId) query.set("vehicleId", vehicleId);
     try {
       const result = await json<{
         data: Issue[];
@@ -93,7 +98,7 @@ export default function IssuesWorkspace({ companyId }: Readonly<{ companyId: str
     } finally {
       setLoading(false);
     }
-  }, [base, blocking, page, severity, status]);
+  }, [base, blocking, page, severity, status, vehicleId]);
 
   const loadDetail = useCallback(
     async (issueId: string) => {
@@ -242,6 +247,20 @@ export default function IssuesWorkspace({ companyId }: Readonly<{ companyId: str
             </select>
           </label>
         </div>
+        {vehicleId ? (
+          <p className="active-filter">
+            Showing issues for the selected vehicle.
+            <button
+              className="quiet"
+              onClick={() => {
+                setVehicleId("");
+                setPage(1);
+              }}
+            >
+              Clear vehicle filter
+            </button>
+          </p>
+        ) : null}
         {loading ? (
           <p className="muted">Loading issues…</p>
         ) : issues.length === 0 ? (

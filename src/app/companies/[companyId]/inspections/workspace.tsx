@@ -19,6 +19,7 @@ type Option = { id: string; questionId: string; label: string; sortOrder: number
 type Section = { id: string; title: string; description: string | null; sortOrder: number };
 type Submission = {
   id: string;
+  vehicleId: string;
   templateId: string;
   templateVersionId: string;
   status: string;
@@ -65,6 +66,8 @@ export default function InspectionWorkspace({ companyId }: Readonly<{ companyId:
   const [savedResponses, setSavedResponses] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [failedVehicleId, setFailedVehicleId] = useState("");
+  const [odometerConfirmationToken, setOdometerConfirmationToken] = useState("");
   const [error, setError] = useState("");
 
   const refreshHistory = useCallback(async () => {
@@ -184,20 +187,34 @@ export default function InspectionWorkspace({ companyId }: Readonly<{ companyId:
     }
   }
 
-  async function finish() {
+  async function finish(confirmationToken?: string) {
     if (!submission) return;
+    const submittedVehicleId = submission.vehicleId;
     setBusy(true);
     setError("");
     try {
-      const result = await json<{ data: { kind: string; outcome?: string } }>(
+      const result = await json<{
+        data: {
+          kind: string;
+          outcome?: string;
+          result?: { confirmationToken?: string; differenceKm?: number };
+        };
+      }>(
         `${base}/inspections/submissions/${submission.id}/submit`,
-        mutation("POST", {}),
+        mutation("POST", confirmationToken ? { confirmationToken } : {}),
       );
       if (result.data.kind !== "SUBMITTED") {
-        setError("The odometer reading needs confirmation in the full operational workflow.");
+        const token = result.data.result?.confirmationToken;
+        if (!token) throw new Error("Odometer confirmation could not be prepared");
+        setOdometerConfirmationToken(token);
+        setError(
+          `The odometer differs from the accepted baseline by ${result.data.result?.differenceKm?.toLocaleString() ?? "an unusual amount"} km. Confirm to submit it for review.`,
+        );
         return;
       }
+      setOdometerConfirmationToken("");
       setNotice(`Inspection submitted: ${result.data.outcome}.`);
+      setFailedVehicleId(result.data.outcome === "FAIL" ? submittedVehicleId : "");
       setSubmission(null);
       await refreshHistory();
     } catch (cause) {
@@ -221,9 +238,17 @@ export default function InspectionWorkspace({ companyId }: Readonly<{ companyId:
         </p>
       ) : null}
       {notice ? (
-        <p className="message success" role="status">
+        <div className="message success" role="status">
           {notice}
-        </p>
+          {failedVehicleId ? (
+            <a
+              className="notice-link"
+              href={`/companies/${companyId}/issues?vehicleId=${failedVehicleId}`}
+            >
+              View generated issues
+            </a>
+          ) : null}
+        </div>
       ) : null}
 
       {!submission ? (
@@ -270,9 +295,16 @@ export default function InspectionWorkspace({ companyId }: Readonly<{ companyId:
               <h2>{submission.templateName}</h2>
               <p className="muted">{submission.vehicleRegistration}</p>
             </div>
-            <button className="primary" disabled={busy} onClick={() => void finish()}>
-              Submit inspection
-            </button>
+            <div className="question-actions">
+              <button className="primary" disabled={busy} onClick={() => void finish()}>
+                Submit inspection
+              </button>
+              {odometerConfirmationToken ? (
+                <button disabled={busy} onClick={() => void finish(odometerConfirmationToken)}>
+                  Confirm odometer and submit
+                </button>
+              ) : null}
+            </div>
           </div>
           {grouped.map(({ section, questions: sectionQuestions }) => (
             <fieldset key={section.id}>

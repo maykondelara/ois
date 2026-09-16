@@ -181,7 +181,13 @@ describe("inspection issue engine", () => {
   });
 });
 
-function releaseFake(unresolved: number) {
+function releaseFake(
+  unresolved: number,
+  options: {
+    vehicleStatus?: "ACTIVE" | "INACTIVE" | "OUT_OF_SERVICE";
+    source?: "DEFECT" | "MANUAL";
+  } = {},
+) {
   const updates: Array<Record<string, unknown>> = [];
   const activities: Array<Record<string, unknown>> = [];
   const hold = { id: "hold-1", appliedStatusHistoryId: "status-oos", releasedAt: null };
@@ -189,7 +195,10 @@ function releaseFake(unresolved: number) {
     $executeRaw: async () => 1,
     $queryRaw: async () => [{ id: submission.vehicleId }],
     vehicle: {
-      findUnique: async () => ({ id: submission.vehicleId, operationalStatus: "OUT_OF_SERVICE" }),
+      findUnique: async () => ({
+        id: submission.vehicleId,
+        operationalStatus: options.vehicleStatus ?? "OUT_OF_SERVICE",
+      }),
       update: async ({ data }: { data: Record<string, unknown> }) => ({
         id: submission.vehicleId,
         ...data,
@@ -204,7 +213,11 @@ function releaseFake(unresolved: number) {
       ),
     },
     vehicleStatusHistory: {
-      findFirst: async () => ({ id: "status-oos", toStatus: "OUT_OF_SERVICE", source: "DEFECT" }),
+      findFirst: async () => ({
+        id: "status-oos",
+        toStatus: "OUT_OF_SERVICE",
+        source: options.source ?? "DEFECT",
+      }),
       create: async ({ data }: { data: Record<string, unknown> }) => ({
         id: "status-release",
         ...data,
@@ -246,6 +259,25 @@ describe("vehicle defect release", () => {
     expect(vehicle).toMatchObject({ operationalStatus: "ACTIVE" });
     expect(fake.updates).toHaveLength(1);
     expect(fake.activities[0]).toMatchObject({ action: "vehicle.released_from_defect_hold" });
+  });
+
+  it("does not reactivate an inactive vehicle or bypass a newer manual OOS reason", async () => {
+    await expect(
+      releaseVehicleFromResolvedIssues(
+        releaseFake(0, { vehicleStatus: "INACTIVE" }).client as never,
+        manager,
+        submission.vehicleId,
+        "Unsafe inactive release",
+      ),
+    ).rejects.toMatchObject({ code: "VEHICLE_RELEASE_STATUS_INVALID" });
+    await expect(
+      releaseVehicleFromResolvedIssues(
+        releaseFake(0, { source: "MANUAL" }).client as never,
+        manager,
+        submission.vehicleId,
+        "Unsafe manual OOS release",
+      ),
+    ).rejects.toMatchObject({ code: "VEHICLE_RELEASE_ORIGIN_UNPROVEN" });
   });
 
   it("never grants DRIVER vehicle release authority", async () => {

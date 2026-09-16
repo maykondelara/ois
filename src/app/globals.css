@@ -427,6 +427,21 @@ h1 {
   margin: 1rem 0 0;
   padding: 0.85rem 1rem;
 }
+.notice-link {
+  display: inline-block;
+  margin-left: 1rem;
+  font-weight: 800;
+}
+.active-filter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  background: #edf5ee;
+  color: #315b3b;
+}
 .error {
   background: #fae4e1;
   color: #81281f;
