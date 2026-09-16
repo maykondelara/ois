@@ -110,6 +110,7 @@ const phase3cTables = [
   "inspection_response_options",
   "inspection_response_files",
 ];
+const phase3dTables = ["issues", "issue_status_history", "issue_actions", "vehicle_defect_holds"];
 
 const phase3aDeferredTables = [
   "driver_documents",
@@ -139,6 +140,8 @@ const phase3cFoundationMigration =
   "prisma/migrations/20260913000100_phase3c_inspection_engine_foundation/migration.sql";
 const phase3cSoftRemovalMigration =
   "prisma/migrations/20260913000200_phase3c2_draft_configuration_soft_removal/migration.sql";
+const phase3dFoundationMigration =
+  "prisma/migrations/20260915000100_phase3d1_issues_resolution_vehicle_release/migration.sql";
 const hardenedMembershipPolicies = [
   "memberships_select_bootstrap_or_tenant",
   "memberships_insert_self",
@@ -359,6 +362,31 @@ async function main() {
     );
   }
 
+  const phase3dPresent = new Set(
+    (await admin.query("SELECT tablename FROM pg_tables WHERE schemaname='public'")).rows.map(
+      (x) => x.tablename,
+    ),
+  );
+
+  if (phase3dTables.every((name) => phase3dPresent.has(name))) {
+    console.log("phase3d_migration_apply: PASS (already applied)");
+  } else if (phase3dTables.some((name) => phase3dPresent.has(name))) {
+    throw new Error(
+      "phase3d_migration_apply: FAIL partial Phase 3D validation schema detected; manual review required before retry",
+    );
+  } else {
+    console.log("phase3d_migration_apply: START");
+    await m.query("BEGIN");
+    try {
+      await m.query(await readFile(phase3dFoundationMigration, "utf8"));
+      await m.query("COMMIT");
+    } catch (error) {
+      await m.query("ROLLBACK");
+      throw error;
+    }
+    console.log("phase3d_migration_apply: PASS");
+  }
+
   const membershipPolicies = await admin.query(
     "SELECT policyname FROM pg_policies WHERE schemaname='public' AND tablename='company_memberships'",
   );
@@ -508,7 +536,7 @@ async function main() {
   console.log(JSON.stringify({ tables: migratedTables.rows.map((x) => x.tablename) }));
   console.log("bootstrap_rls_matrix: START");
   await admin.query(
-    "TRUNCATE activities, inspection_response_files, inspection_response_options, inspection_responses, inspection_submissions, inspection_template_vehicle_applicabilities, inspection_template_category_applicabilities, inspection_question_options, inspection_questions, inspection_sections, inspection_template_versions, inspection_templates, document_review_history, document_files, driver_licence_files, documents, stored_files, compliance_requirement_assignments, compliance_requirement_exemptions, compliance_requirements, document_types, vehicle_status_history, vehicle_odometer_readings, driver_vehicle_capabilities, driver_licences, driver_regular_availability, drivers, vehicles, vehicle_categories, company_operational_settings, locations, company_memberships, accounts, sessions, password_reset_tokens, verification_tokens, companies, users",
+    "TRUNCATE issue_actions, issue_status_history, vehicle_defect_holds, issues, activities, inspection_response_files, inspection_response_options, inspection_responses, inspection_submissions, inspection_template_vehicle_applicabilities, inspection_template_category_applicabilities, inspection_question_options, inspection_questions, inspection_sections, inspection_template_versions, inspection_templates, document_review_history, document_files, driver_licence_files, documents, stored_files, compliance_requirement_assignments, compliance_requirement_exemptions, compliance_requirements, document_types, vehicle_status_history, vehicle_odometer_readings, driver_vehicle_capabilities, driver_licences, driver_regular_availability, drivers, vehicles, vehicle_categories, company_operational_settings, locations, company_memberships, accounts, sessions, password_reset_tokens, verification_tokens, companies, users",
   );
   // Seed only capability/role definitions before creating isolated acceptance fixtures.
   const permissionSeedPrisma = new PrismaClient({ datasources: { db: { url } } });
