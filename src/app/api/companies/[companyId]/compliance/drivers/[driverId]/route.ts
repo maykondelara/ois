@@ -1,6 +1,10 @@
 import { prisma } from "@/db/prisma";
 import { tenantRoute } from "@/lib/http/api";
-import { complianceObligationDto, complianceSummaryDto } from "@/lib/http/phase3b-dto";
+import {
+  complianceObligationDto,
+  complianceSummaryDto,
+  exemptionDto,
+} from "@/lib/http/phase3b-dto";
 import { getDriverCompliance } from "@/modules/documents/phase3b-read.service";
 type Params = Promise<{ companyId: string; driverId: string }>;
 export async function GET(request: Request, { params }: { params: Params }) {
@@ -11,6 +15,7 @@ export async function GET(request: Request, { params }: { params: Params }) {
       data: {
         evaluationDate: result.evaluationDate.toISOString(),
         obligations: result.obligations.map(complianceObligationDto),
+        exemptions: result.exemptions.map(exemptionDto),
         summary: complianceSummaryDto(
           result.summary?.status ?? "NOT_EVALUATED",
           result.obligations,

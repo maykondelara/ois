@@ -155,6 +155,140 @@ export async function getDocument(client: TenantClient, context: TenantContext, 
   });
 }
 
+export async function getOperationalDocumentDetail(
+  client: TenantClient,
+  context: TenantContext,
+  id: string,
+) {
+  requirePermission(context, "documents.read");
+  return withTenantTransaction(client, context, async (tx) => {
+    const document = await tx.document.findUnique({
+      where: { companyId_id: { companyId: context.companyId, id } },
+    });
+    if (!document) throw new TenantRecordNotFoundError("Document");
+    if (context.role === "DRIVER") {
+      const driverId = await ownDriverId(tx, context);
+      if (document.subjectType !== "DRIVER" || document.driverId !== driverId)
+        throw new AuthorizationError("Driver document scope denied");
+    }
+    const [fileAssociations, reviewHistory] = await Promise.all([
+      tx.documentFile.findMany({
+        where: { companyId: context.companyId, documentId: id, removedAt: null },
+        orderBy: [{ attachedAt: "asc" }, { id: "asc" }],
+      }),
+      tx.documentReviewHistory.findMany({
+        where: { companyId: context.companyId, documentId: id },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      }),
+    ]);
+    const storedFiles = await tx.storedFile.findMany({
+      where: {
+        companyId: context.companyId,
+        id: { in: fileAssociations.map((item) => item.storedFileId) },
+      },
+    });
+    const files = fileAssociations.flatMap((association) => {
+      const storedFile = storedFiles.find((item) => item.id === association.storedFileId);
+      return storedFile ? [{ ...association, storedFile }] : [];
+    });
+    return {
+      document,
+      files,
+      reviewHistory,
+      createdByCurrentUser: document.createdByUserId === context.actorUserId,
+    };
+  });
+}
+
+export async function listComplianceSubjects(client: TenantClient, context: TenantContext) {
+  requirePermission(context, "compliance.read");
+  const evaluation = await currentEvaluation(client, context);
+  return withTenantTransaction(client, context, async (tx) => {
+    let summaries = [...evaluation.subjectSummaries];
+    if (context.role === "DRIVER") {
+      const driverId = await ownDriverId(tx, context);
+      summaries = summaries.filter(
+        (item) => item.subjectType === "DRIVER" && item.subjectId === driverId,
+      );
+    }
+    const driverIds = summaries
+      .filter((item) => item.subjectType === "DRIVER")
+      .map((item) => item.subjectId);
+    const vehicleIds = summaries
+      .filter((item) => item.subjectType === "VEHICLE")
+      .map((item) => item.subjectId);
+    const [drivers, vehicles, company] = await Promise.all([
+      tx.driver.findMany({
+        where: { companyId: context.companyId, id: { in: driverIds } },
+        select: { id: true, displayName: true },
+      }),
+      tx.vehicle.findMany({
+        where: { companyId: context.companyId, id: { in: vehicleIds } },
+        select: { id: true, registrationDisplay: true },
+      }),
+      tx.company.findUnique({ where: { id: context.companyId }, select: { id: true, name: true } }),
+    ]);
+    return summaries.map((summary) => {
+      const obligations = evaluation.obligations.filter(
+        (item) => item.subjectType === summary.subjectType && item.subjectId === summary.subjectId,
+      );
+      return {
+        ...summary,
+        displayName:
+          summary.subjectType === "DRIVER"
+            ? (drivers.find((item) => item.id === summary.subjectId)?.displayName ?? "Driver")
+            : summary.subjectType === "VEHICLE"
+              ? (vehicles.find((item) => item.id === summary.subjectId)?.registrationDisplay ??
+                "Vehicle")
+              : (company?.name ?? "Company"),
+        obligations,
+      };
+    });
+  });
+}
+
+export async function listRequirementAssignments(
+  client: TenantClient,
+  context: TenantContext,
+  requirementId: string,
+) {
+  requirePermission(context, "compliance.read");
+  if (context.role === "DRIVER") throw new AuthorizationError("Driver configuration scope denied");
+  return withTenantTransaction(client, context, async (tx) => {
+    const requirement = await tx.complianceRequirement.findUnique({
+      where: { companyId_id: { companyId: context.companyId, id: requirementId } },
+      select: { id: true },
+    });
+    if (!requirement) throw new TenantRecordNotFoundError("Compliance requirement");
+    return tx.complianceRequirementAssignment.findMany({
+      where: { companyId: context.companyId, requirementId, removedAt: null },
+      orderBy: [{ assignedAt: "desc" }, { id: "desc" }],
+      take: 100,
+    });
+  });
+}
+
+export async function listRequirementExemptions(
+  client: TenantClient,
+  context: TenantContext,
+  requirementId: string,
+) {
+  requirePermission(context, "compliance.read");
+  if (context.role === "DRIVER") throw new AuthorizationError("Driver configuration scope denied");
+  return withTenantTransaction(client, context, async (tx) => {
+    const requirement = await tx.complianceRequirement.findUnique({
+      where: { companyId_id: { companyId: context.companyId, id: requirementId } },
+      select: { id: true },
+    });
+    if (!requirement) throw new TenantRecordNotFoundError("Compliance requirement");
+    return tx.complianceRequirementExemption.findMany({
+      where: { companyId: context.companyId, requirementId, revokedAt: null },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 100,
+    });
+  });
+}
+
 /** Validates URL parent/child relationships before invoking lifecycle services. */
 export async function requireRequirementChild(
   client: TenantClient,
@@ -259,6 +393,12 @@ export async function getDriverCompliance(
         throw new AuthorizationError("Driver compliance scope denied");
     });
   const evaluation = await currentEvaluation(client, context);
+  const exemptions = await withTenantTransaction(client, context, (tx) =>
+    tx.complianceRequirementExemption.findMany({
+      where: { companyId: context.companyId, subjectType: "DRIVER", driverId, revokedAt: null },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    }),
+  );
   return {
     evaluationDate: evaluation.evaluationDate,
     obligations: evaluation.obligations.filter(
@@ -267,6 +407,7 @@ export async function getDriverCompliance(
     summary: evaluation.subjectSummaries.find(
       (item) => item.subjectType === "DRIVER" && item.subjectId === driverId,
     ),
+    exemptions,
   };
 }
 
@@ -279,6 +420,12 @@ export async function getVehicleCompliance(
   if (context.role === "DRIVER")
     throw new AuthorizationError("Driver vehicle compliance scope denied");
   const evaluation = await currentEvaluation(client, context);
+  const exemptions = await withTenantTransaction(client, context, (tx) =>
+    tx.complianceRequirementExemption.findMany({
+      where: { companyId: context.companyId, subjectType: "VEHICLE", vehicleId, revokedAt: null },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    }),
+  );
   return {
     evaluationDate: evaluation.evaluationDate,
     obligations: evaluation.obligations.filter(
@@ -287,6 +434,7 @@ export async function getVehicleCompliance(
     summary: evaluation.subjectSummaries.find(
       (item) => item.subjectType === "VEHICLE" && item.subjectId === vehicleId,
     ),
+    exemptions,
   };
 }
 
@@ -295,10 +443,22 @@ export async function getCompanyCompliance(client: TenantClient, context: Tenant
   if (context.role === "DRIVER")
     throw new AuthorizationError("Driver company compliance scope denied");
   const evaluation = await currentEvaluation(client, context);
+  const exemptions = await withTenantTransaction(client, context, (tx) =>
+    tx.complianceRequirementExemption.findMany({
+      where: {
+        companyId: context.companyId,
+        subjectType: "COMPANY",
+        companySubjectId: context.companyId,
+        revokedAt: null,
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    }),
+  );
   return {
     evaluationDate: evaluation.evaluationDate,
     obligations: evaluation.obligations.filter((item) => item.subjectType === "COMPANY"),
     summary: evaluation.subjectSummaries.find((item) => item.subjectType === "COMPANY"),
+    exemptions,
   };
 }
 

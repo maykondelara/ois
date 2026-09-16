@@ -38,6 +38,10 @@ export async function GET(request: Request, { params }: { params: Params }) {
     });
     return {
       data: result.data.map(documentDto),
+      capabilities: {
+        canManage: context.role === "DRIVER" || context.permissions.has("documents.manage"),
+        canReview: context.permissions.has("documents.review") && context.role !== "DRIVER",
+      },
       page: { ...page, hasNextPage: result.hasNextPage },
     };
   });

@@ -255,6 +255,48 @@ a {
 .danger-text {
   color: #81281f;
 }
+.workspace-tabs {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 1.5rem;
+  border-bottom: 1px solid #cfd7d0;
+}
+.workspace-tabs button {
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+}
+.workspace-tabs button.active {
+  background: #246b3a;
+  color: white;
+}
+.configuration-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+}
+.compliance-compliant,
+.requirement-compliant,
+.review-approved {
+  background: #ddf1e2;
+  color: #175a2a;
+}
+.compliance-at_risk,
+.requirement-expiring_soon,
+.review-pending_review {
+  background: #fff0bd;
+  color: #654f00;
+}
+.compliance-non_compliant,
+.requirement-expired,
+.requirement-missing,
+.review-rejected {
+  background: #fae4e1;
+  color: #81281f;
+}
+.compliance-not_evaluated {
+  background: #eceeeb;
+  color: #536057;
+}
 button,
 input,
 select,
@@ -598,6 +640,7 @@ legend {
   }
   .module-grid,
   .workspace-columns,
+  .configuration-grid,
   .detail-grid,
   .form-grid,
   .inline-form,

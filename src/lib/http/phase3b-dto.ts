@@ -6,6 +6,8 @@ import type {
   DocumentType,
   DriverLicenceFile,
   DocumentFile,
+  DocumentReviewHistory,
+  StoredFile,
 } from "@prisma/client";
 import type { ComplianceObligation } from "@/modules/compliance/compliance-evaluation.service";
 
@@ -79,6 +81,24 @@ export const documentFileDto = (item: DocumentFile) => ({
   storedFileId: item.storedFileId,
   attachedAt: item.attachedAt.toISOString(),
   removedAt: date(item.removedAt),
+});
+
+export const operationalDocumentFileDto = (item: DocumentFile & { storedFile: StoredFile }) => ({
+  id: item.id,
+  storedFileId: item.storedFileId,
+  filename: item.storedFile.originalFilename,
+  mimeType: item.storedFile.mimeType,
+  sizeBytes: item.storedFile.sizeBytes,
+  fileState: item.storedFile.fileState,
+  attachedAt: item.attachedAt.toISOString(),
+});
+
+export const documentReviewHistoryDto = (item: DocumentReviewHistory) => ({
+  id: item.id,
+  fromStatus: item.fromStatus,
+  toStatus: item.toStatus,
+  reason: item.reason,
+  createdAt: item.createdAt.toISOString(),
 });
 
 export const driverLicenceFileDto = (item: DriverLicenceFile) => ({
