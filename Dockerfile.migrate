@@ -1,0 +1,15 @@
+FROM node:24-bookworm-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install --no-install-recommends -y openssl && rm -rf /var/lib/apt/lists/*
+
+COPY package.json pnpm-lock.yaml ./
+
+RUN corepack enable && pnpm install --frozen-lockfile
+
+COPY prisma ./prisma
+
+RUN pnpm prisma generate
+
+CMD ["pnpm", "db:migrate:deploy"]
