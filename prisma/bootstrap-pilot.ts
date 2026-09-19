@@ -17,7 +17,7 @@ async function main() {
   const companySlug = requireEnv("OIS_BOOTSTRAP_COMPANY_SLUG").toLowerCase();
   const ownerEmail = requireEnv("OIS_BOOTSTRAP_OWNER_EMAIL").toLowerCase();
   const ownerPassword = requireEnv("OIS_BOOTSTRAP_OWNER_PASSWORD");
-  const databaseUrl = requireEnv("DATABASE_URL");
+  const databaseUrl = requireEnv("OIS_BOOTSTRAP_DATABASE_URL");
 
   const prisma = new PrismaClient({
     datasources: {
