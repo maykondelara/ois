@@ -1,5 +1,11 @@
 import NextAuth from "next-auth";
-import { authOptions } from "@/auth";
 
-const handler = NextAuth(authOptions);
+import { getAuthOptions } from "@/auth";
+
+async function handler(...args: Parameters<ReturnType<typeof NextAuth>>) {
+  const authHandler = NextAuth(getAuthOptions());
+
+  return authHandler(...args);
+}
+
 export { handler as GET, handler as POST };
