@@ -32,6 +32,7 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
+    "db:bootstrap:pilot": "tsx prisma/bootstrap-pilot.ts",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down"
   },
